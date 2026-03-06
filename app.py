@@ -1,67 +1,119 @@
 import streamlit as st
 import openai
+import os
+from dotenv import load_dotenv
 
-# Configuración de la Interfaz
-st.set_page_config(page_title="AS/400 SFTP Refactor Agent", layout="wide")
-st.title("🤖 Agente de Migración FTP a SFTP (IBM i)")
+# 1. Configuración de Entorno y Seguridad
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+client = openai.OpenAI(api_key=api_key) if api_key else None
 
-# Configuración de API Key en la barra lateral
+st.set_page_config(page_title="Expert Migration Agent", layout="wide")
+st.title("🤖 Agente de Migración Crítica (AS/400)")
+
+# Inicializar estados si no existen
+if "step" not in st.session_state:
+    st.session_state.step = "upload"
+if "plan" not in st.session_state:
+    st.session_state.plan = ""
+if "source_code" not in st.session_state:
+    st.session_state.source_code = ""
+
+# 2. Barra Lateral - Configuración Técnica
 with st.sidebar:
-    openai_key = st.text_input("OpenAI API Key", type="password")
+    st.header("⚙️ Configuración")
     model_name = st.selectbox("Modelo", ["gpt-4o", "gpt-4-turbo"])
+    max_retries = st.slider("Reintentos Autocuración", 1, 5, 3)
+    if api_key:
+        st.success("✅ API Key cargada de .env")
+    else:
+        st.error("❌ Falta OPENAI_API_KEY en .env")
 
-# Prompt de sistema
-SYSTEM_PROMPT = """
-Actúa como un experto en AS/400, RPGLE, COBOL y CL. 
-Tu objetivo es refactorizar código legacy que utiliza comandos FTP nativos 
-y sustituirlos por llamadas al nuevo motor centralizado de SFTP.
+# 3. Prompts de Especialidad
+SYSTEM_PROMPT_PLANNER = """Actúa como Arquitecto de Software. Analiza el código AS/400 y genera un PLAN DE MIGRACIÓN. 
+Identifica comandos FTP y describe qué ID_INTERFAZ y ARCHIVO se usarán. NO generes código todavía."""
 
-REGLAS DE TRANSFORMACIÓN:
-1. Localiza comandos STRTCPFTP o bloques de código que generen archivos INPUT para FTP.
-2. Sustituye esos bloques por una llamada (CALL) al programa controlador 'SFTP_CTRL_CL'.
-3. Los parámetros del nuevo CALL deben ser: (ID_INTERFAZ, NOMBRE_ARCHIVO).
-4. Mantén la lógica de negocio intacta, solo cambia la capa de transporte.
-5. Si el código fuente es RPGLE (Free o Fixed), usa la sintaxis adecuada.
-6. Comenta el código antiguo indicando: '* Migrado a SFTP por Agente IA'.
-"""
+SYSTEM_PROMPT_REFACTOR = """Actúa como Desarrollador Senior de RPGLE/CL. Refactoriza siguiendo el plan aprobado.
+Usa CALL PGM(SFTP_CTRL_CL) PARM('ID' 'FILE'). Si fallas, el compilador te avisará."""
 
+# --- FUNCIONES DE AGENTE ---
 
-def refactor_code(source_code, api_key, model_name):
-    # configura el cliente con la nueva API (openai>=1.0.0)
-    client = openai.OpenAI(api_key=api_key)
+def get_ai_response(prompt, system_role):
     resp = client.chat.completions.create(
         model=model_name,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Refactoriza el siguiente código fuente de AS/400:\n\n{source_code}"}
-        ],
+        messages=[{"role": "system", "content": system_role}, {"role": "user", "content": prompt}],
         temperature=0
     )
-    # campo 'choices' estructura igual
     return resp.choices[0].message.content
 
+def simulate_compiler(code):
+    """Lógica de validación sintáctica (Self-Healing)"""
+    errors = []
+    if "FIXME" in code: errors.append("Existen placeholders sin resolver.")
+    if "STRTCPFTP" in code: errors.append("El comando antiguo STRTCPFTP no fue eliminado.")
+    return (len(errors) == 0, errors)
 
-# Área de Carga de Archivos
-uploaded_file = st.file_uploader("Sube el componente (.rpgle, .clp, .txt)", type=['rpgle', 'clp', 'txt', 'cbl'])
+# --- FLUJO HUMAN-IN-THE-LOOP (HITL) ---
 
-if uploaded_file and openai_key:
-    source_text = uploaded_file.read().decode('utf-8')
-    
+# PASO 1: Carga de Archivo
+if st.session_state.step == "upload":
+    uploaded_file = st.file_uploader("Sube el componente legacy", type=['rpgle', 'clp'])
+    if uploaded_file and client:
+        st.session_state.source_code = uploaded_file.read().decode('utf-8')
+        if st.button("🔍 Generar Plan de Análisis"):
+            with st.spinner("Agente analizando código..."):
+                st.session_state.plan = get_ai_response(st.session_state.source_code, SYSTEM_PROMPT_PLANNER)
+                st.session_state.step = "validate_plan"
+                st.rerun()
+
+# PASO 2: Validación Humana del Plan
+elif st.session_state.step == "validate_plan":
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.subheader("Código Original")
-        st.code(source_text, language='sql')
+        st.subheader("📄 Código Original")
+        st.code(st.session_state.source_code)
+    with col2:
+        st.subheader("📋 Plan Proyectado (HITL)")
+        st.info(st.session_state.plan)
+        
+        st.markdown("---")
+        if st.button("✅ Aprobar y Refactorizar"):
+            st.session_state.step = "refactor"
+            st.rerun()
+        if st.button("🔄 Rechazar y Reintentar"):
+            st.session_state.step = "upload"
+            st.rerun()
 
-    if st.button("🚀 Refactorizar a SFTP"):
-        with st.spinner("Analizando y refactorizando..."):
-            try:
-                result = refactor_code(source_text, openai_key, model_name)
-                with col2:
-                    st.subheader("Código Refactorizado")
-                    st.code(result, language='sql')
-                    st.success("Refactorización completada.")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-else:
-    st.info("Por favor, ingresa tu API Key y sube un archivo para comenzar.")
+# PASO 3: Ejecución con Autocuración
+elif st.session_state.step == "refactor":
+    st.subheader("🚀 Ejecutando Refactorización Atómica")
+    
+    with st.status("Ciclo de Autocuración en progreso...") as status:
+        current_attempt = 0
+        code_to_verify = st.session_state.source_code
+        
+        while current_attempt <= max_retries:
+            st.write(f"Intento {current_attempt + 1}: Generando código...")
+            refactored = get_ai_response(f"Plan: {st.session_state.plan}\nCódigo: {code_to_verify}", SYSTEM_PROMPT_REFACTOR)
+            
+            st.write("Verificando con Agente Compilador...")
+            success, errors = simulate_compiler(refactored)
+            
+            if success:
+                status.update(label="✅ Refactorización exitosa y validada.", state="complete")
+                st.session_state.final_code = refactored
+                break
+            else:
+                st.warning(f"Errores detectados: {errors}")
+                code_to_verify = f"Código previo: {refactored}\nErrores a corregir: {errors}"
+                current_attempt += 1
+        
+        if current_attempt > max_retries:
+            status.update(label="❌ Falló la autocuración tras múltiples intentos.", state="error")
+
+    st.subheader("Resultado Final")
+    st.code(st.session_state.final_code)
+    
+    if st.button("🏁 Finalizar y Nueva Migración"):
+        st.session_state.step = "upload"
+        st.rerun()

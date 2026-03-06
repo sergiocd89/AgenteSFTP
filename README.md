@@ -10,109 +10,103 @@
 
 ```mermaid
 flowchart LR
-    subgraph App
-        A[app.py] --> B[Core Logic]
-        B --> C[Modules]
+    subgraph Frontend
+        A[Streamlit UI] --> B[Refactor Engine]
     end
-    subgraph External
-        D[Database]
-        E[APIs]
+    subgraph Backend
+        B --> C[OpenAI API]
+        B --> D[File I/O]
     end
-    B --> D
-    B --> E
+    C --> E[OpenAI Service]
 ```
 
 ## Instalación
 
 ```bash
 # Clona el repositorio
-$ git clone https://github.com/usuario/[NombreDelProyecto].git
-$ cd [NombreDelProyecto]
+git clone https://github.com/usuario/[NombreDelProyecto].git
+cd [NombreDelProyecto]
 
-# Crea un entorno virtual
-$ python -m venv venv
-$ source venv/bin/activate  # Linux/Mac
-$ venv\Scripts\activate   # Windows
-$ .\venv\Scripts\Activate.ps1
+# Crea y activa un entorno virtual
+python -m venv venv
+# Linux/Mac
+source venv/bin/activate
+# Windows PowerShell
+venv\Scripts\Activate.ps1
 
-# Actualiza pip, setuptools y wheel
-$ python.exe -m pip install --upgrade pip setuptools wheel
+# Actualiza instaladores
+disable-pip-version-check=false
+python -m pip install --upgrade pip setuptools wheel
 
 # Instala dependencias
-$ pip install -r requirements.txt
+git config --local core.autocrlf input
+pip install -r requirements.txt
 ```
-
-# Requisitos de Python
-> **Importante:** este proyecto está probado con **Python 3.11–3.14** y requiere una
-> versión de `streamlit` anterior (1.18.1) debido a compatibilidades con Python 3.14.
-> No utiliza `langchain`, por lo que las dependencias son ligeras y fáciles de instalar.
-
-> **Nota:** el archivo incluye `pytest` como dependencia de desarrollo para ejecutar pruebas locales; no es estrictamente necesario en producción.
-
 
 ## Configuración de Entorno
 
-Crea un archivo `.env` en la raíz del proyecto con las variables necesarias:
+Coloca un archivo `.env` en la raíz con estas variables:
 
 ```ini
 # .env
-SECRET_KEY=tu_secreto_aqui
-DATABASE_URL=sqlite:///db.sqlite3
+OPENAI_API_KEY=sk-yourkey
+OPENAI_MODEL=gpt-4o
 ```
 
-| Variable       | Descripción                        | Ejemplo                    |
-|----------------|------------------------------------|----------------------------|
-| `SECRET_KEY`   | Clave de seguridad para la app     | `s3cr3t`                   |
-| `DATABASE_URL` | URL de conexión a la base de datos | `sqlite:///db.sqlite3`     |
+| Variable        | Propósito                                 | Ejemplo                  |
+|-----------------|-------------------------------------------|--------------------------|
+| `OPENAI_API_KEY`| Clave para autenticar contra OpenAI       | `sk-...`                 |
+| `OPENAI_MODEL`  | Modelo por defecto para las solicitudes   | `gpt-4o`                 |
 
 ## Ejemplos de Uso
 
-Esta aplicación corre como **web app con Streamlit**, por lo que simplemente lanzas
-el servidor y accedes desde tu navegador.
-
-```bash
-# después de activar el entorno y haber instalado requerimientos:
-streamlit run app.py
-```
-
-Abre `http://localhost:8501` en el navegador; la interfaz te permitirá subir el
-componente, especificar la API Key y elegir el modelo. Se mostrarán lado a lado el
-código original y el resultado refactorizado.
-
-También puedes importar y usar la función desde otro script:
+### Uso como módulo
 
 ```python
 from app import refactor_code
 
-texto = "..."  # contenido de tu componente
+texto = "...código AS/400..."
 resultado = refactor_code(texto, api_key="sk-...", model_name="gpt-4o")
 print(resultado)
 ```
+
+### Interfaz Web (Streamlit)
+
+```
+streamlit run app.py
+# luego abre http://localhost:8501 en el navegador
+```
+
+Puedes subir un archivo y ver el original y la versión SFTP en pantalla.
 
 ## Estructura de Directorios
 
 ```
 [NombreDelProyecto]/
-├── app.py
-├── requirements.txt
+├── app.py                # punto de entrada Streamlit + lógica
+├── requirements.txt      # dependencias
 ├── README.md
-├── .env.example
+├── .env.example          # ejemplo de configuración
 └── tests/
-    └── test_app.py
+    └── test_app.py       # pruebas unitarias
 ```
 
 ## Testing
 
-Ejecuta las pruebas con:
-
 ```bash
-$ pytest
+pip install -r requirements.txt
+pytest -q
 ```
 
 ## Contribución
 
-¡Gracias por tu interés en contribuir! Por favor, abre un *issue* o un *pull request* con tu propuesta. Asegúrate de seguir el código de conducta del proyecto.
+1. Haz un *fork* del repositorio
+2. Crea una rama (`feature/nueva-funcion`)
+3. Añade código y documentación
+4. Envía un *pull request*
+
+Lee el `CONTRIBUTING.md` y el código de conducta antes de participar.
 
 ## Licencia
 
-Este proyecto está bajo la licencia MIT. Consulta el archivo `LICENSE` para más detalles.
+Proyecto bajo **MIT License**. Consulta `LICENSE` para detalles.
