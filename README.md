@@ -1,10 +1,17 @@
-# [Nombre del Proyecto]
+# AgenteSFTP
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
 
 ## Descripción
 
-[Qué hace el proyecto en una frase]
+Aplicación de migración de código AS/400 que refactoriza comandos FTP hacia SFTP usando un modelo de lenguaje.
+
+**Tecnologías:** Streamlit 1.18.1, OpenAI Python 1.0.0, Paramiko, SCP, dotenv, Requests.
+
+**Funcionalidades clave:**
+1. Interfaz web para cargar componentes y refactorizar automáticamente.
+2. Generación de código SFTP a partir de código legacy AS/400.
+3. Soporte de múltiples modelos OpenAI configurables.
 
 ## Arquitectura del Sistema
 
