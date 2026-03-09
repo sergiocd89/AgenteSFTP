@@ -12,6 +12,19 @@ for name in [
     'text_input', 'selectbox'
 ]:
     setattr(streamlit_stub, name, lambda *a, **k: None)
+
+# provide a simple session_state object that allows attribute access
+class SessionState(dict):
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+    def __setattr__(self, name, value):
+        self[name] = value
+
+streamlit_stub.session_state = SessionState()
+
 # sidebar is used as context manager
 class SidebarStub:
     def __enter__(self): return self
