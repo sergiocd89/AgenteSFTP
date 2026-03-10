@@ -1,74 +1,75 @@
 # AgenteSFTP
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License](https://img.shields.io/badge/license-MIT-blue) ![IBM%20i](https://img.shields.io/badge/IBM%20i-compatible-green)
 
-## Descripción
+## 🚀 Identidad
+Agente especializado en migración de código AS/400 que convierte comandos FTP a SFTP utilizando un modelo de lenguaje.
 
-Aplicación de migración de código AS/400 que refactoriza comandos FTP hacia SFTP usando un modelo de lenguaje.
-
-**Tecnologías:** Streamlit 1.18.1, OpenAI Python 1.0.0, Paramiko, SCP, dotenv, Requests.
-
-**Funcionalidades clave:**
-1. Interfaz web para cargar componentes y refactorizar automáticamente.
-2. Generación de código SFTP a partir de código legacy AS/400.
-3. Soporte de múltiples modelos OpenAI configurables.
-
-## Arquitectura del Sistema
-
+## 🏗️ Arquitectura Visual
 ```mermaid
-flowchart LR
-    subgraph Frontend
-        A[Streamlit UI] --> B[Refactor Engine]
+graph TD
+    User --> "Streamlit UI"
+    "Streamlit UI" --> subgraph Agents[Agents]
+        Analyst --> Architect --> Developer --> Auditor
     end
-    subgraph Backend
-        B --> C[OpenAI API]
-        B --> D[File I/O]
-    end
-    C --> E[OpenAI Service]
+    Agents --> Output
 ```
 
-## Instalación
-
-```bash
-# Clona el repositorio
-git clone https://github.com/usuario/[NombreDelProyecto].git
-cd [NombreDelProyecto]
-
-# Crea y activa un entorno virtual
+## 🛠️ Instalación
+1. Clona el repositorio:
+   ```bash
+git clone https://github.com/usuario/AgenteSFTP.git
+cd AgenteSFTP
+   ```
+2. Crea y activa un entorno virtual:
+   ```bash
 python -m venv venv
-# Linux/Mac
-source venv/bin/activate
 # Windows PowerShell
-venv\Scripts\Activate.ps1
-
-# Actualiza instaladores
-disable-pip-version-check=false
+env\Scripts\Activate.ps1
+# (Linux/Mac: source venv/bin/activate)
+   ```
+3. Asegúrate de tener pip reciente:
+   ```bash
 python -m pip install --upgrade pip setuptools wheel
-
-# Instala dependencias
-git config --local core.autocrlf input
+   ```
+4. Instala dependencias:
+   ```bash
 pip install -r requirements.txt
-```
+   ```
 
-## Configuración de Entorno
-
-Coloca un archivo `.env` en la raíz con estas variables:
-
+## 🔐 Variables de Entorno
+Crea un fichero `.env` en la raíz con:
 ```ini
-# .env
 OPENAI_API_KEY=sk-yourkey
 OPENAI_MODEL=gpt-4o
+``` 
+
+| Variable          | Descripción                               | Ejemplo        |
+|-------------------|-------------------------------------------|----------------|
+| `OPENAI_API_KEY`  | Autenticación para OpenAI                 | `sk-...`       |
+| `OPENAI_MODEL`    | Modelo por defecto                        | `gpt-4o`       |
+
+## 📁 Estructura de Carpetas
+```
+AgenteSFTP/
+├── app.py                # Streamlit + lógica principal
+├── requirements.txt      # dependencias
+├── README.md             # documentación
+├── .env.example          # ejemplo de variables
+├── tests/
+│   └── test_app.py       # pruebas unitarias
+└── RPG_Ejemplo/
+    └── SEND_FTP.RPGLE    # código de ejemplo
 ```
 
-| Variable        | Propósito                                 | Ejemplo                  |
-|-----------------|-------------------------------------------|--------------------------|
-| `OPENAI_API_KEY`| Clave para autenticar contra OpenAI       | `sk-...`                 |
-| `OPENAI_MODEL`  | Modelo por defecto para las solicitudes   | `gpt-4o`                 |
+## ▶️ Uso
+```bash
+streamlit run app.py
+# Abre http://localhost:8501 en tu navegador
+```
+Carga un fichero con código AS/400 y observa la conversión a SFTP.
 
-## Ejemplos de Uso
-
-### Uso como módulo
-
+## ✅ Ejemplo como módulo Python
 ```python
 from app import refactor_code
 
@@ -77,43 +78,19 @@ resultado = refactor_code(texto, api_key="sk-...", model_name="gpt-4o")
 print(resultado)
 ```
 
-### Interfaz Web (Streamlit)
-
-```
-streamlit run app.py
-# luego abre http://localhost:8501 en el navegador
-```
-
-Puedes subir un archivo y ver el original y la versión SFTP en pantalla.
-
-## Estructura de Directorios
-
-```
-[NombreDelProyecto]/
-├── app.py                # punto de entrada Streamlit + lógica
-├── requirements.txt      # dependencias
-├── README.md
-├── .env.example          # ejemplo de configuración
-└── tests/
-    └── test_app.py       # pruebas unitarias
-```
-
-## Testing
-
+## 🧪 Testing
 ```bash
 pip install -r requirements.txt
 pytest -q
 ```
 
-## Contribución
+## 🤝 Contribuir
+1. Haz *fork* del repositorio
+2. Crea rama (`feature/nueva-funcion`)
+3. Añade código/documentación
+4. Envía *pull request*
 
-1. Haz un *fork* del repositorio
-2. Crea una rama (`feature/nueva-funcion`)
-3. Añade código y documentación
-4. Envía un *pull request*
+Consulta `CONTRIBUTING.md` y el código de conducta.
 
-Lee el `CONTRIBUTING.md` y el código de conducta antes de participar.
-
-## Licencia
-
-Proyecto bajo **MIT License**. Consulta `LICENSE` para detalles.
+## 📄 Licencia
+MIT License – mira el fichero `LICENSE` para más detalles.

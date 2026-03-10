@@ -1,75 +1,47 @@
 import streamlit as st
 import openai
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# 1. Configuración Inicial
+# --- 1. CONFIGURACIÓN E INSTANCIACIÓN ---
 load_dotenv()
 
-# helper para crear cliente de OpenAI bajo demanda (evita crear uno en import)
-_client: openai.OpenAI | None = None
+st.set_page_config(
+    page_title="IBM i Expert Migrator v2",
+    layout="wide",
+    page_icon="🏗️"
+)
 
-def _get_client(api_key: str | None = None) -> openai.OpenAI:
-    global _client
-    if _client is None:
-        key = api_key or os.getenv("OPENAI_API_KEY")
-        if not key:
-            raise ValueError("OPENAI API key is required")
-        _client = openai.OpenAI(api_key=key)
-    return _client
+def local_css(file_name):
+    """Carga un archivo CSS local e inyecta el estilo en la app."""
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+        
+local_css("assets/style.css")
 
-st.set_page_config(page_title="AS/400 Legacy Agent Migrator", layout="wide", page_icon="🤖")
+@st.cache_resource
+def get_openai_client():
+    """Instancia el cliente de OpenAI de forma eficiente por sesión."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        st.error("🔑 API Key no configurada. Revisa tu archivo .env")
+        st.stop()
+    return openai.OpenAI(api_key=api_key)
 
-# --- ESTILOS UX ---
-st.markdown("""
-    <style>
-    .step-header { color: #1E88E5; font-weight: bold; font-size: 24px; margin-top: 20px; border-bottom: 2px solid #1E88E5; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #1E88E5; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
+def load_agent_prompt(filename: str) -> str:
+    """Carga el prompt del sistema desde la carpeta de agentes."""
+    path = Path(".github/agents") / filename
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "Eres un asistente experto en sistemas IBM i (AS/400)."
 
-# función exportada para uso como módulo
-
-def refactor_code(text: str, *, api_key: str | None = None, model_name: str = "gpt-4o") -> str:
-    """Refactoriza un fragmento de código legacy usando la API de OpenAI.
-
-    Este helper reproduce la lógica mínima que usa la aplicación Streamlit,
-    de manera que pueda importarse desde otros módulos (y desde tests).
-
-    Args:
-        text: código o descripción de entrada que se enviará al modelo.
-        api_key: clave de OpenAI. Si no se proporciona, se intentará leerla de
-            la variable de entorno ``OPENAI_API_KEY``.
-        model_name: modelo a solicitar (por defecto ``gpt-4o``).
-
-    Returns:
-        Texto devuelto por el modelo, normalmente el código refactorizado.
-    """
-    # determino la clave
-    key = api_key or os.getenv("OPENAI_API_KEY")
-    if not key:
-        raise ValueError("OPENAI API key is required for refactor_code")
-
-    client = _get_client(api_key=key)
-    resp = client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": "Actúa como migrador de FTP a SFTP."},
-            {"role": "user", "content": text},
-        ],
-    )
-    return resp.choices[0].message.content
-
-# --- MANEJO DE ESTADO ---
-if "current_step" not in st.session_state: st.session_state.current_step = 1
-if "source_code" not in st.session_state: st.session_state.source_code = ""
-if "plan" not in st.session_state: st.session_state.plan = ""
-if "preview_code" not in st.session_state: st.session_state.preview_code = ""
-if "final_code" not in st.session_state: st.session_state.final_code = ""
-
+# --- 2. LÓGICA DE IA ---
 def get_ai_response(prompt, system_role):
     try:
-        client = _get_client()
+        client = get_openai_client()
         resp = client.chat.completions.create(
             model=st.session_state.model_name,
             messages=[
@@ -80,109 +52,116 @@ def get_ai_response(prompt, system_role):
         )
         return resp.choices[0].message.content
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"❌ Error de conexión con la IA: {e}")
         return None
 
-# --- SIDEBAR ---
+# --- 4. MANEJO DE ESTADO ---
+state_keys = {
+    "current_step": 1,
+    "source_code": "",
+    "analysis": "",
+    "plan": "",
+    "execution_code": "",
+    "validation_report": "",
+    "final_delivery": ""
+}
+
+for key, default_value in state_keys.items():
+    if key not in st.session_state:
+        st.session_state[key] = default_value
+
+# --- 5. SIDEBAR ---
 with st.sidebar:
-    st.title("⚙️ Configuración de Migración")
-    st.session_state.model_name = st.selectbox("Modelo", ["gpt-4o", "gpt-4-turbo"])
-    st.session_state.temp = st.slider("Precisión vs Creatividad", 0.0, 1.0, 0.0)
-    st.session_state.max_retries = st.number_input("Reintentos de Autocuración", 1, 5, 3)
-    
+    st.title("⚙️ Panel de Control")
+    st.session_state.model_name = st.selectbox("LLM Engine", ["gpt-4o", "gpt-4-turbo"])
+    st.session_state.temp = st.slider("Precisión Técnica (0=Creatividad baja)", 0.0, 0.5, 0.0)
     st.divider()
-    st.session_state.target_format = st.selectbox(
-        "Formato Destino",
-        ["RPGLE Free (**FREE)", "Python (Paramiko/SFTP)", "SQLRPGLE Modern"]
-    )
-    st.session_state.strict_mode = st.toggle("Validar protocolo SFTP", value=True)
+    st.info("**Flujo de Agentes:**\n1. Carga\n2. Análisis\n3. Planificación\n4. Desarrollo\n5. Auditoría\n6. Entrega")
+    if st.button("🗑️ Reiniciar Proyecto"):
+        for key, val in state_keys.items(): st.session_state[key] = val
+        st.rerun()
 
-st.title("🤖 Migrador de Protocolos: FTP ➡️ SFTP")
+st.title("🤖 Agente Migrador de Protocolos IBM i")
+st.caption("Modernización automática de FTP a SFTP mediante IA Agéntica")
 
-# --- PASO 1: INGESTA DE CÓDIGO ---
-st.markdown('<p class="step-header">Paso 1: Ingesta de Código Fuente</p>', unsafe_allow_html=True)
-with st.container(border=True):
-    if st.session_state.current_step == 1:
-        file = st.file_uploader("Sube fuentes con comandos FTP", type=['rpgle', 'clp', 'txt'])
-        if file and st.button("Analizar Migración SFTP"):
+# --- PASO 1: CARGA ---
+st.markdown('<p class="step-header">Paso 1: Carga del Proyecto</p>', unsafe_allow_html=True)
+if st.session_state.current_step == 1:
+    with st.container(border=True):
+        file = st.file_uploader("Sube fuentes AS/400 (RPGLE, CLP, SQLRPGLE)", type=['rpgle', 'clp', 'sqlrpgle'])
+        if file and st.button("Iniciar Pipeline de Migración"):
             st.session_state.source_code = file.read().decode('utf-8')
-            with st.spinner("Diseñando arquitectura SFTP segura..."):
-                # ACTUALIZACIÓN: Instrucción explícita de cambio de protocolo
-                sys_role = (f"Actúa como Arquitecto de Ciberseguridad e IBM i. Tu tarea prioritaria es "
-                            f"identificar comandos FTP (SEND, GET, MGET) y reemplazarlos por una "
-                            f"arquitectura SFTP segura en {st.session_state.target_format}. "
-                            f"Considera el manejo de llaves SSH y CCSID.")
-                st.session_state.plan = get_ai_response(st.session_state.source_code, sys_role)
-                st.session_state.current_step = 2
+            st.session_state.current_step = 2
+            st.rerun()
+elif st.session_state.source_code:
+    st.success("✅ Miembro fuente cargado y listo para análisis.")
+
+# --- PASO 2: ANÁLISIS (AGENTE 01) ---
+if st.session_state.current_step >= 2:
+    st.markdown('<p class="step-header">Paso 2: Análisis de Código Legacy</p>', unsafe_allow_html=True)
+    if st.session_state.current_step == 2:
+        with st.spinner("El Agente Analista está escaneando dependencias..."):
+            sys_role = load_agent_prompt("01_analyst.md")
+            st.session_state.analysis = get_ai_response(st.session_state.source_code, sys_role)
+            st.session_state.current_step = 3
+            st.rerun()
+    st.info(st.session_state.analysis)
+
+# --- PASO 3: PLAN DE MODIFICACIÓN (AGENTE 02) ---
+if st.session_state.current_step >= 3:
+    st.markdown('<p class="step-header">Paso 3: Estrategia SFTP (Arquitectura)</p>', unsafe_allow_html=True)
+    if st.session_state.current_step == 3:
+        with st.container(border=True):
+            sys_role = load_agent_prompt("02_architect.md")
+            suggested_plan = get_ai_response(st.session_state.analysis, sys_role)
+            st.session_state.plan = st.text_area("Propuesta del Arquitecto:", value=suggested_plan, height=200)
+            if st.button("Aprobar Plan y Generar Código"):
+                st.session_state.current_step = 4
                 st.rerun()
     else:
-        st.success(f"✅ Archivo cargado correctamente. Tamaño: {len(st.session_state.source_code)} caracteres.")
+        st.success("✅ Estrategia de arquitectura validada.")
 
-# --- PASO 2: PLANIFICACIÓN DE ARQUITECTURA ---
-if st.session_state.current_step >= 2:
-    st.markdown('<p class="step-header">Paso 2: Planificación de Arquitectura</p>', unsafe_allow_html=True)
-    with st.container(border=True):
-        if st.session_state.current_step == 2:
-            edited_plan = st.text_area("Revisa el plan (verifica llaves SSH y rutas):", value=st.session_state.plan, height=200)
-            if st.button("Generar Código Modernizado"):
-                st.session_state.plan = edited_plan
-                with st.spinner("Escribiendo lógica SFTP..."):
-                    sys_role = "Genera solo el código. Si es Python, usa paramiko. Si es RPGLE, usa mandatos SSH/SFTP."
-                    prompt = f"Plan: {st.session_state.plan}\n\nCódigo Original:\n{st.session_state.source_code}"
-                    st.session_state.preview_code = get_ai_response(prompt, sys_role)
-                    st.session_state.current_step = 3
-                    st.rerun()
-        else:
-            st.info("Plan de arquitectura aprobado.")
-
-# --- PASO 3: PREVISUALIZACIÓN Y COMPARACIÓN ---
-if st.session_state.current_step >= 3:
-    st.markdown('<p class="step-header">Paso 3: Previsualización de Diferencias</p>', unsafe_allow_html=True)
-    with st.container(border=True):
-        if st.session_state.current_step == 3:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Legacy (FTP)")
-                st.code(st.session_state.source_code)
-            with col2:
-                st.subheader("Moderno (SFTP)")
-                st.code(st.session_state.preview_code)
-            if st.session_state.current_step == 3:
-                if st.button("Validar Seguridad y Autocuración"):
-                    st.session_state.current_step = 4
-                    st.rerun()
-        else:
-            st.success("Cambios aceptados por el usuario.")
-
-# --- PASO 4: AUTOCURACIÓN (Lógica SFTP) ---
+# --- PASO 4: EJECUCIÓN (AGENTE 03) ---
 if st.session_state.current_step >= 4:
-    st.markdown('<p class="step-header">Paso 4: Validación de Reglas SFTP</p>', unsafe_allow_html=True)
-    if not st.session_state.final_code:
-        with st.status("Validando seguridad del túnel...", expanded=True) as status:
-            current_code = st.session_state.preview_code
-            for i in range(st.session_state.max_retries):
-                errors = []
-                # Reglas de Autocuración para SFTP
-                if "FTP" in current_code.upper() and "SFTP" not in current_code.upper():
-                    errors.append("Se detectó mención a 'FTP' cuando el destino debe ser 'SFTP'.")
-                
-                if "PYTHON" in st.session_state.target_format.upper():
-                    if "PARAMIKO" not in current_code.upper():
-                        errors.append("Falta la librería 'paramiko' para la gestión de SFTP.")
-                
-                if "RPG" in st.session_state.target_format.upper():
-                    if "PUT" in current_code.upper() and "SFTP" not in current_code.upper():
-                        errors.append("El comando PUT debe ejecutarse dentro de una sesión SFTP/SSH.")
+    st.markdown('<p class="step-header">Paso 4: Generación de Código RPGLE/CL</p>', unsafe_allow_html=True)
+    if st.session_state.current_step == 4:
+        with st.spinner("El Agente Desarrollador está refactorizando el código..."):
+            sys_role = load_agent_prompt("03_developer.md")
+            prompt = f"Código original:\n{st.session_state.source_code}\n\nPlan de Migración:\n{st.session_state.plan}"
+            st.session_state.execution_code = get_ai_response(prompt, sys_role)
+            st.session_state.current_step = 5
+            st.rerun()
+    st.code(st.session_state.execution_code, language='rpgle')
 
-                if not errors: break
-                
-                st.warning(f"Error detectado: {errors}")
-                fix_prompt = f"Corrige estos fallos de protocolo: {errors}. Código:\n{current_code}"
-                current_code = get_ai_response(fix_prompt, "Experto en protocolos SSH/SFTP.")
-            
-            st.session_state.final_code = current_code
-            status.update(label="Migración completada con éxito.", state="complete")
+# --- PASO 5: VALIDACIÓN (AGENTE 04) ---
+if st.session_state.current_step >= 5:
+    st.markdown('<p class="step-header">Paso 5: Auditoría de Seguridad e Integridad</p>', unsafe_allow_html=True)
+    if st.session_state.current_step == 5:
+        with st.status("Auditoría en proceso...", expanded=True) as status:
+            sys_role = load_agent_prompt("04_auditor.md")
+            st.session_state.validation_report = get_ai_response(st.session_state.execution_code, sys_role)
+            status.update(label="Auditoría completada", state="complete")
+            st.session_state.current_step = 6
+            st.rerun()
+    st.warning(st.session_state.validation_report)
 
-    st.subheader("Resultado Final SFTP")
-    st.code(st.session_state.final_code)
-    st.download_button("Descargar Fuente Migrado", st.session_state.final_code)
+# --- PASO 6: ENTREGA ---
+if st.session_state.current_step == 6:
+    st.markdown('<p class="step-header">Paso 6: Paquete de Entrega Final</p>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.subheader("📦 Resultado de Modernización")
+        st.write("El código ha sido procesado por el pipeline agéntico y está listo para pruebas en ambiente de desarrollo.")
+        st.session_state.final_delivery = st.session_state.execution_code
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📥 Descargar Fuente Modernizado (.MBR)",
+                data=st.session_state.final_delivery,
+                file_name="modernized_code.rpgle",
+                mime="text/plain"
+            )
+        with col2:
+            if st.button("🚀 Iniciar Nueva Migración"):
+                for key, val in state_keys.items(): st.session_state[key] = val
+                st.rerun()
