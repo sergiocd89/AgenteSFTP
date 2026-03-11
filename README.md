@@ -1,96 +1,100 @@
-# AgenteSFTP
+# IBM i Legacy Agent Migrator
 
-![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License](https://img.shields.io/badge/license-MIT-blue) ![IBM%20i](https://img.shields.io/badge/IBM%20i-compatible-green)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![License](https://img.shields.io/badge/License-Not%20Specified-lightgrey)
+![IBM i Compatibility](https://img.shields.io/badge/IBM%20i-Compatible-success)
 
-## 🚀 Identidad
-Agente especializado en migración de código AS/400 que convierte comandos FTP a SFTP utilizando un modelo de lenguaje.
+Plataforma agéntica en Streamlit para modernización de sistemas legacy IBM i con dos rutas de trabajo:
 
-## 🏗️ Arquitectura Visual
+- FTP a SFTP con salida nativa IBM i
+- COBOL a Python para escenarios de modernización asistida
+
+## Arquitectura Visual
+
 ```mermaid
 graph TD
-    User --> "Streamlit UI"
-    "Streamlit UI" --> subgraph Agents[Agents]
-        Analyst --> Architect --> Developer --> Auditor
-    end
-    Agents --> Output
+    User[User] --> UI[Streamlit UI]
+    UI --> Analyst[Analyst]
+    Analyst --> Architect[Architect]
+    Architect --> Developer[Developer]
+    Developer --> Auditor[Auditor]
+    Auditor --> Output[Output]
 ```
 
-## 🛠️ Instalación
-1. Clona el repositorio:
-   ```bash
-git clone https://github.com/usuario/AgenteSFTP.git
+## Guía de Instalación
+
+```bash
+git clone <url-del-repositorio>
 cd AgenteSFTP
-   ```
-2. Crea y activa un entorno virtual:
-   ```bash
+```
+
+```bash
 python -m venv venv
+```
+
+```bash
 # Windows PowerShell
-env\Scripts\Activate.ps1
-# (Linux/Mac: source venv/bin/activate)
-   ```
-3. Asegúrate de tener pip reciente:
-   ```bash
-python -m pip install --upgrade pip setuptools wheel
-   ```
-4. Instala dependencias:
-   ```bash
-pip install -r requirements.txt
-   ```
+venv\Scripts\Activate.ps1
 
-## 🔐 Variables de Entorno
-Crea un fichero `.env` en la raíz con:
+# Linux/macOS
+# source venv/bin/activate
+```
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto (puedes usar `.env.example` como base).
+
+| Variable | Requerida | Descripción | Ejemplo |
+|---|---|---|---|
+| `OPENAI_API_KEY` | Sí | API key para llamadas al modelo LLM | `sk-...` |
+| `SECRET_KEY` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `your_secret_key_here` |
+| `DATABASE_URL` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `sqlite:///db.sqlite3` |
+
+Ejemplo mínimo:
+
 ```ini
-OPENAI_API_KEY=sk-yourkey
-OPENAI_MODEL=gpt-4o
-``` 
-
-| Variable          | Descripción                               | Ejemplo        |
-|-------------------|-------------------------------------------|----------------|
-| `OPENAI_API_KEY`  | Autenticación para OpenAI                 | `sk-...`       |
-| `OPENAI_MODEL`    | Modelo por defecto                        | `gpt-4o`       |
-
-## 📁 Estructura de Carpetas
+OPENAI_API_KEY=sk-...
 ```
+
+## Estructura de Carpetas
+
+```text
 AgenteSFTP/
-├── app.py                # Streamlit + lógica principal
-├── requirements.txt      # dependencias
-├── README.md             # documentación
-├── .env.example          # ejemplo de variables
+├── .github/
+│   └── agents/
+│       ├── 00_documentator_readme.md
+│       ├── 01_analyst_AS400SFTP.md
+│       ├── 01_analyst_CobolToPython.md
+│       ├── 02_architect_AS400SFTP.md
+│       ├── 02_architect_CobolToPython.md
+│       ├── 03_developer_AS400SFTP.md
+│       ├── 03_developer_CobolToPython.md
+│       ├── 04_auditor_AS400SFTP.md
+│       └── 04_auditor_CobolToPython.md
+├── assets/
+│   ├── dark_mode.css
+│   └── light_mode.css
+├── RPG_Ejemplo/
+│   └── SEND_FTP.RPGLE
 ├── tests/
-│   └── test_app.py       # pruebas unitarias
-└── RPG_Ejemplo/
-    └── SEND_FTP.RPGLE    # código de ejemplo
+│   └── test_app.py
+├── main.py
+├── modulo_cobol.py
+├── modulo_sftp.py
+├── utils.py
+├── requirements.txt
+└── README.md
 ```
 
-## ▶️ Uso
+## Uso
+
 ```bash
-streamlit run app.py
-# Abre http://localhost:8501 en tu navegador
-```
-Carga un fichero con código AS/400 y observa la conversión a SFTP.
-
-## ✅ Ejemplo como módulo Python
-```python
-from app import refactor_code
-
-texto = "...código AS/400..."
-resultado = refactor_code(texto, api_key="sk-...", model_name="gpt-4o")
-print(resultado)
+streamlit run main.py
 ```
 
-## 🧪 Testing
-```bash
-pip install -r requirements.txt
-pytest -q
-```
-
-## 🤝 Contribuir
-1. Haz *fork* del repositorio
-2. Crea rama (`feature/nueva-funcion`)
-3. Añade código/documentación
-4. Envía *pull request*
-
-Consulta `CONTRIBUTING.md` y el código de conducta.
-
-## 📄 Licencia
-MIT License – mira el fichero `LICENSE` para más detalles.
+Al iniciar, la UI permite elegir el flujo de migración y ejecutar el pipeline completo hasta auditoría y entrega de código.

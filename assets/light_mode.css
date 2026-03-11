@@ -1,0 +1,19 @@
+:root {
+    --primary-color: #005A9C; /* IBM Blue */
+    --bg-color: #FFFFFF;
+    --text-color: #1E1E1E;
+    --sidebar-bg: #F8F9FA;
+    --card-bg: #F0F2F6;
+    --border-color: #D1D5DB;
+}
+
+.step-header { 
+    color: var(--primary-color); 
+    font-weight: bold; 
+    font-size: 22px; 
+    margin-top: 15px; 
+    border-left: 5px solid var(--primary-color); 
+    padding-left: 10px; 
+}
+
+.stApp { background-color: var(--bg-color); color: var(--text-color); }

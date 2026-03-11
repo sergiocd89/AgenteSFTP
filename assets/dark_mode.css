@@ -1,0 +1,24 @@
+:root {
+    --primary-color: #60A5FA; /* Lighter Blue for Dark Mode */
+    --bg-color: #0E1117;
+    --text-color: #E0E0E0;
+    --sidebar-bg: #1A1C23;
+    --card-bg: #1E293B;
+    --border-color: #334155;
+}
+
+.step-header { 
+    color: var(--primary-color); 
+    font-weight: bold; 
+    font-size: 22px; 
+    margin-top: 15px; 
+    border-left: 5px solid var(--primary-color); 
+    padding-left: 10px; 
+}
+
+/* Ajuste para que los inputs se vean bien en oscuro */
+.stTextArea textarea, .stFileUploader {
+    background-color: #0B0E14 !important;
+    color: #E0E0E0 !important;
+    border: 1px solid var(--border-color) !important;
+}

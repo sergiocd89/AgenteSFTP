@@ -38,7 +38,7 @@ sys.modules['streamlit'] = streamlit_stub
 # ensure workspace root is on sys.path so `app` can be imported
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app import refactor_code
+from modulo_sftp import refactor_code
 
 
 class DummyResponse:

@@ -1,15 +1,11 @@
-# Interfaz de usuario y Web App
-streamlit==1.18.1  # versión anterior compatible con Python 3.14
+# UI web
+streamlit>=1.32.0,<2.0.0
 
-# Orquestación de IA y Modelos de Lenguaje
-openai==1.0.0     # se usa directamente, sin langchain
+# Cliente LLM
+openai>=1.0.0,<2.0.0
 
-# Visualización usada por streamlit
-altair==4.2.0  # necesario para compatibilidad con streamlit 1.18.1
-# Conexión Segura y Protocolos (SSH/SFTP para IBM i)
-paramiko==3.4.0
-scp==0.14.5
+# Variables de entorno
+python-dotenv>=1.0.0,<2.0.0
 
-# Utilidades y Variables de Entorno
-python-dotenv==1.0.1
-requests==2.31.0
+# Testing
+pytest>=7.0.0,<9.0.0

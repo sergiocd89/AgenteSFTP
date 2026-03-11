@@ -12,7 +12,7 @@ Genera un archivo README.md basado en la siguiente información del proyecto:
 3. **Guía de Instalación**: Pasos claros para clonar, crear `venv` e instalar dependencias.
 4. **Variables de Entorno**: Tabla con `OPENAI_API_KEY` y cualquier otra necesaria.
 5. **Estructura de Carpetas**: Representación visual de la jerarquía del proyecto (incluyendo `.github/agents/`).
-6. **Uso**: Instrucción clara de cómo lanzar la aplicación con `streamlit run app.py`.
+6. **Uso**: Instrucción clara de cómo lanzar la aplicación con `streamlit run main.py`.
 
 ## ESTILO Y TONO
 - Profesional, técnico y directo.
