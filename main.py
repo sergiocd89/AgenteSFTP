@@ -6,9 +6,9 @@ from modulo_cobol import show_cobol_migration
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="IBM i Expert Modernization Suite",
+    page_title="Scotia IA Agent Hub",
     layout="wide",
-    page_icon="🏗️"
+    page_icon="🏦"
 )
 
 # --- 2. INICIALIZACIÓN DE ESTADO GLOBAL ---
@@ -57,7 +57,7 @@ with st.sidebar:
 
 if st.session_state.app_mode == "Portal":
     # --- PÁGINA DE INICIO ---
-    st.title("🏗️ IBM i Expert Modernization Suite")
+    st.title("🏦 Scotia IA Agent Hub")
     st.subheader("Seleccione el flujo de modernización que desea ejecutar:")
     st.write("Herramientas agénticas especializadas en sistemas legacy.")
     

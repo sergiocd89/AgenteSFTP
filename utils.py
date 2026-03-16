@@ -49,14 +49,75 @@ def call_llm(system_role: str, user_content: str, model: str, temp: float):
         return None
 
 # --- 4. INTERFAZ Y ESTILO ---
-def apply_custom_theme(theme_name: str):
-    """Aplica el CSS según el tema elegido."""
-    theme_file = "assets/dark_mode.css" if theme_name == "Dark Mode" else "assets/light_mode.css"
-    if Path(theme_file).exists():
-        with open(theme_file, "r") as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    else:
-        st.sidebar.warning(f"⚠️ Archivo de estilo no encontrado: {theme_file}")
+def apply_custom_theme(theme: str) -> None:
+    # Paleta institucional (aprox.) Scotiabank Chile
+    scotia_red = "#ED0722"
+    scotia_red_hover = "#C7051C"
+
+    if theme == "Dark Mode":
+        bg = "#121212"
+        surface = "#1E1E1E"
+        text = "#F5F5F5"
+        muted = "#BDBDBD"
+        border = "#2C2C2C"
+    else:  # Light Mode
+        bg = "#F7F7F7"
+        surface = "#FFFFFF"
+        text = "#333333"
+        muted = "#666666"
+        border = "#E6E6E6"
+
+    st.markdown(
+        f"""
+        <style>
+            .stApp {{
+                background-color: {bg};
+                color: {text};
+            }}
+
+            section[data-testid="stSidebar"] {{
+                background-color: {surface};
+                border-right: 2px solid {scotia_red};
+            }}
+
+            h1, h2, h3, h4, h5, h6, p, label, span, div {{
+                color: {text};
+            }}
+
+            .stButton > button {{
+                border-radius: 8px;
+                border: 1px solid {border};
+            }}
+
+            .stButton > button[kind="primary"] {{
+                background-color: {scotia_red};
+                color: #FFFFFF;
+                border: 1px solid {scotia_red};
+                font-weight: 600;
+            }}
+
+            .stButton > button[kind="primary"]:hover {{
+                background-color: {scotia_red_hover};
+                border-color: {scotia_red_hover};
+            }}
+
+            div[data-testid="stVerticalBlockBorderWrapper"] {{
+                background-color: {surface};
+                border: 1px solid {border} !important;
+                border-radius: 10px;
+            }}
+
+            hr {{
+                border-color: {border};
+            }}
+
+            small, .stCaption {{
+                color: {muted} !important;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
 def step_header(text: str):
     """Genera un encabezado visual consistente para los pasos del pipeline."""
