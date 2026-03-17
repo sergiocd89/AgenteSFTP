@@ -3,6 +3,7 @@ from utils import apply_custom_theme, get_openai_client
 # Importamos las funciones principales de tus módulos
 from modulo_sftp import show_sftp_migration
 from modulo_cobol import show_cobol_migration
+from modulo_dtsx import show_dtsx_generation
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -63,7 +64,7 @@ if st.session_state.app_mode == "Portal":
     
     st.divider()
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         with st.container(border=True):
@@ -91,6 +92,19 @@ if st.session_state.app_mode == "Portal":
                 st.session_state.app_mode = "COBOL_Module"
                 st.rerun()
 
+    with col3:
+        with st.container(border=True):
+            st.markdown("### 📦 Módulo COBOL ➔ DTSX")
+            st.write("""
+            **Objetivo:** Generación asistida de paquetes SSIS a partir de COBOL con SQL Server y Sybase.
+            - Detecta bloques `EXEC SQL` y cadenas de conexión.
+            - Propone connection managers y control flow.
+            - Entrega un paquete `.dtsx` descargable.
+            """)
+            if st.button("Generar Paquete DTSX", use_container_width=True, type="primary"):
+                st.session_state.app_mode = "DTSX_Module"
+                st.rerun()
+
     st.divider()
     st.caption("Ecosistema diseñado para arquitectos de sistemas IBM i.")
 
@@ -101,3 +115,7 @@ elif st.session_state.app_mode == "SFTP_Module":
 elif st.session_state.app_mode == "COBOL_Module":
     # Llamada al módulo de COBOL
     show_cobol_migration()
+
+elif st.session_state.app_mode == "DTSX_Module":
+    # Llamada al módulo de COBOL a DTSX
+    show_dtsx_generation()
