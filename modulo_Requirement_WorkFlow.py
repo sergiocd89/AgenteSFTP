@@ -1,4 +1,7 @@
+from io import BytesIO
+
 import streamlit as st
+import streamlit.components.v1 as components
 from utils import call_llm, load_agent_prompt, step_header
 
 
@@ -53,6 +56,128 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
     return result or "No se pudo obtener respuesta del modelo en este paso."
 
 
+def _extract_mermaid_code(markdown_text: str) -> str:
+    """Extrae el primer bloque ```mermaid ... ``` del texto del agente."""
+    if not markdown_text:
+        return ""
+
+    marker = "```mermaid"
+    start = markdown_text.find(marker)
+    if start == -1:
+        return ""
+
+    content_start = start + len(marker)
+    end = markdown_text.find("```", content_start)
+    if end == -1:
+        return ""
+
+    return markdown_text[content_start:end].strip()
+
+
+def _render_mermaid(mermaid_code: str) -> None:
+    """Renderiza Mermaid como SVG en Streamlit usando componentes HTML."""
+    html = f"""
+    <div id=\"mermaid-container\">{mermaid_code}</div>
+    <script type=\"module\">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+        const container = document.querySelector('#mermaid-container');
+        container.classList.add('mermaid');
+        mermaid.run({{ querySelector: '#mermaid-container' }});
+    </script>
+    <style>
+        #mermaid-container {{
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            overflow-x: auto;
+            padding: 12px;
+            background: #ffffff;
+            border-radius: 8px;
+        }}
+        #mermaid-container svg {{
+            max-width: 100%;
+            height: auto;
+        }}
+    </style>
+    """
+    components.html(html, height=520, scrolling=True)
+
+
+def _remove_mermaid_blocks(markdown_text: str) -> str:
+    """Elimina bloques ```mermaid``` para no mostrarlos como código."""
+    if not markdown_text:
+        return ""
+
+    cleaned = markdown_text
+    marker = "```mermaid"
+    while True:
+        start = cleaned.find(marker)
+        if start == -1:
+            break
+        end = cleaned.find("```", start + len(marker))
+        if end == -1:
+            break
+        cleaned = cleaned[:start] + cleaned[end + 3:]
+
+    return cleaned.strip()
+
+
+def _markdown_to_plain_lines(markdown_text: str) -> list[str]:
+    """Reduce markdown a líneas legibles para exportación simple a PDF."""
+    if not markdown_text:
+        return []
+
+    cleaned_text = _remove_mermaid_blocks(markdown_text)
+    replacements = {
+        "### ": "",
+        "## ": "",
+        "# ": "",
+        "**": "",
+        "`": "",
+        "- [ ] ": "[ ] ",
+        "- ": "• ",
+    }
+
+    for old_value, new_value in replacements.items():
+        cleaned_text = cleaned_text.replace(old_value, new_value)
+
+    return [line.strip() for line in cleaned_text.splitlines() if line.strip()]
+
+
+def _build_pdf_bytes(title: str, markdown_text: str) -> bytes:
+    """Genera un PDF básico a partir del markdown final del issue."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    story = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
+
+    for line in _markdown_to_plain_lines(markdown_text):
+        safe_line = (
+            line.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        story.append(Paragraph(safe_line, styles["BodyText"]))
+        story.append(Spacer(1, 8))
+
+    document.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
 def show_requirement_workflow():
     st.title("🧩 Requirement Workflow")
     st.caption("Pipeline agéntico para convertir requerimientos en un ticket listo para Jira/GitHub.")
@@ -62,9 +187,11 @@ def show_requirement_workflow():
         "requirement_text": "",
         "documents_context": "",
         "loaded_documents": [],
+        "refactor_decision": "Sí",
+        "refactor_feedback": "",
         "creator_output": "",
         "refiner_output": "",
-        "editor_output": "",
+        "refined_output": "",
         "diagram_output": "",
         "sizer_output": "",
         "qa_output": "",
@@ -107,6 +234,12 @@ def show_requirement_workflow():
                     st.rerun()
     else:
         st.success("✅ Requerimiento base cargado.")
+        st.text_area(
+            "Requerimiento ingresado (solo lectura)",
+            value=st.session_state.reqwf_requirement_text,
+            height=200,
+            disabled=True,
+        )
         if st.session_state.reqwf_loaded_documents:
             st.caption(
                 "Documentos usados: "
@@ -131,85 +264,95 @@ def show_requirement_workflow():
 
         if st.session_state.reqwf_creator_output:
             st.info(st.session_state.reqwf_creator_output)
-            if st.session_state.reqwf_current_step == 2 and st.button("Continuar a Refinamiento ➔"):
-                st.session_state.reqwf_current_step = 3
+            st.session_state.reqwf_refactor_decision = st.radio(
+                "¿Desea refactorizar la historia de usuario generada?",
+                options=["Sí", "No"],
+                horizontal=True,
+                index=0 if st.session_state.reqwf_refactor_decision == "Sí" else 1,
+            )
+
+            if st.session_state.reqwf_refactor_decision == "Sí":
+                st.session_state.reqwf_refactor_feedback = st.text_area(
+                    "Ingrese qué desea corregir o mejorar en la historia",
+                    value=st.session_state.reqwf_refactor_feedback,
+                    height=140,
+                    placeholder="Ejemplo: Agregar casos de error, aclarar reglas de negocio y mejorar criterios de aceptación.",
+                )
+            else:
+                st.session_state.reqwf_refactor_feedback = ""
+
+            if st.session_state.reqwf_current_step == 2 and st.button("Continuar ➔"):
+                if st.session_state.reqwf_refactor_decision == "Sí":
+                    st.session_state.reqwf_current_step = 3
+                else:
+                    st.session_state.reqwf_refiner_output = "Refactorización omitida por decisión del usuario."
+                    st.session_state.reqwf_refined_output = st.session_state.reqwf_creator_output
+                    st.session_state.reqwf_current_step = 4
                 st.rerun()
 
-    if st.session_state.reqwf_current_step >= 3:
-        step_header("Paso 3: Agent 02 - Refiner Use Case")
+    if st.session_state.reqwf_current_step >= 3 and st.session_state.reqwf_refactor_decision == "Sí":
+        step_header("Paso 3: Agent 02 - Refinamiento de Historia")
         if not st.session_state.reqwf_refiner_output:
             if st.button("Ejecutar Refinamiento INVEST"):
                 input_refiner = (
                     f"Contexto original:\n{base_context}\n\n"
-                    f"Historia inicial:\n{st.session_state.reqwf_creator_output}"
+                    f"Historia inicial:\n{st.session_state.reqwf_creator_output}\n\n"
+                    f"Correcciones solicitadas por el usuario:\n"
+                    f"{st.session_state.reqwf_refactor_feedback or 'Sin observaciones adicionales.'}"
                 )
                 st.session_state.reqwf_refiner_output = _run_agent(
                     "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md",
                     input_refiner,
                 )
+                st.session_state.reqwf_refined_output = st.session_state.reqwf_refiner_output
                 st.rerun()
 
         if st.session_state.reqwf_refiner_output:
             st.warning(st.session_state.reqwf_refiner_output)
-            if st.session_state.reqwf_current_step == 3 and st.button("Continuar a Edición ➔"):
-                st.session_state.reqwf_current_step = 4
-                st.rerun()
+
+        if st.session_state.reqwf_current_step == 3 and st.button("Aprobar historia y generar diagrama ➔"):
+            st.session_state.reqwf_current_step = 4
+            st.rerun()
 
     if st.session_state.reqwf_current_step >= 4:
-        step_header("Paso 4: Agent 03 - Editor Use Case")
-        if not st.session_state.reqwf_editor_output:
-            input_editor = (
-                f"Contexto original:\n{base_context}\n\n"
-                f"Output del refiner:\n{st.session_state.reqwf_refiner_output}"
-            )
-            st.session_state.reqwf_editor_output = _run_agent(
-                "Agent_Requirement_WorkFlow_03_Editor_Use_Case.md",
-                input_editor,
+        step_header("Paso 4: Agent 04 - Diagram Use Case")
+        if not st.session_state.reqwf_diagram_output:
+            st.session_state.reqwf_diagram_output = _run_agent(
+                "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
+                st.session_state.reqwf_refined_output,
             )
 
-        st.session_state.reqwf_editor_output = st.text_area(
-            "Historia editada (puede ajustarla manualmente)",
-            value=st.session_state.reqwf_editor_output,
-            height=280,
-        )
+        mermaid_code = _extract_mermaid_code(st.session_state.reqwf_diagram_output)
+        if mermaid_code:
+            st.markdown("#### Diagrama visual")
+            _render_mermaid(mermaid_code)
+        else:
+            st.warning("No se encontró un bloque Mermaid en la respuesta del agente. Mostrando salida textual.")
+            st.markdown(st.session_state.reqwf_diagram_output)
 
-        if st.session_state.reqwf_current_step == 4 and st.button("Aprobar historia y generar diagrama ➔"):
+        if st.session_state.reqwf_current_step == 4 and st.button("Continuar a sizing técnico ➔"):
             st.session_state.reqwf_current_step = 5
             st.rerun()
 
     if st.session_state.reqwf_current_step >= 5:
-        step_header("Paso 5: Agent 04 - Diagram Use Case")
-        if not st.session_state.reqwf_diagram_output:
-            st.session_state.reqwf_diagram_output = _run_agent(
-                "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
-                st.session_state.reqwf_editor_output,
-            )
-
-        st.markdown(st.session_state.reqwf_diagram_output)
-
-        if st.session_state.reqwf_current_step == 5 and st.button("Continuar a sizing técnico ➔"):
-            st.session_state.reqwf_current_step = 6
-            st.rerun()
-
-    if st.session_state.reqwf_current_step >= 6:
-        step_header("Paso 6: Agent 05 - Sizer")
+        step_header("Paso 5: Agent 05 - Sizer")
         if not st.session_state.reqwf_sizer_output:
             st.session_state.reqwf_sizer_output = _run_agent(
                 "Agent_Requirement_WorkFlow_05_Sizer.md",
-                st.session_state.reqwf_editor_output,
+                st.session_state.reqwf_refined_output,
             )
 
         st.info(st.session_state.reqwf_sizer_output)
 
-        if st.session_state.reqwf_current_step == 6 and st.button("Continuar a plan de pruebas ➔"):
-            st.session_state.reqwf_current_step = 7
+        if st.session_state.reqwf_current_step == 5 and st.button("Continuar a plan de pruebas ➔"):
+            st.session_state.reqwf_current_step = 6
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 7:
-        step_header("Paso 7: Agent 06 - Generator Test Case")
+    if st.session_state.reqwf_current_step >= 6:
+        step_header("Paso 6: Agent 06 - Generator Test Case")
         if not st.session_state.reqwf_qa_output:
             input_qa = (
-                f"Historia refinada:\n{st.session_state.reqwf_editor_output}\n\n"
+                f"Historia refinada:\n{st.session_state.reqwf_refined_output}\n\n"
                 f"Sizing:\n{st.session_state.reqwf_sizer_output}"
             )
             st.session_state.reqwf_qa_output = _run_agent(
@@ -219,16 +362,16 @@ def show_requirement_workflow():
 
         st.success(st.session_state.reqwf_qa_output)
 
-        if st.session_state.reqwf_current_step == 7 and st.button("Consolidar issue final ➔"):
-            st.session_state.reqwf_current_step = 8
+        if st.session_state.reqwf_current_step == 6 and st.button("Consolidar issue final ➔"):
+            st.session_state.reqwf_current_step = 7
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 8:
-        step_header("Paso 8: Agent 07 - Issue Formatter")
+    if st.session_state.reqwf_current_step >= 7:
+        step_header("Paso 7: Agent 07 - Issue Formatter")
         if not st.session_state.reqwf_issue_output:
             final_context = (
                 f"## Input original\n{base_context}\n\n"
-                f"## Historia editada\n{st.session_state.reqwf_editor_output}\n\n"
+                f"## Historia refinada\n{st.session_state.reqwf_refined_output}\n\n"
                 f"## Diagrama\n{st.session_state.reqwf_diagram_output}\n\n"
                 f"## Sizing\n{st.session_state.reqwf_sizer_output}\n\n"
                 f"## QA\n{st.session_state.reqwf_qa_output}"
@@ -238,13 +381,31 @@ def show_requirement_workflow():
                 final_context,
             )
 
-        st.markdown(st.session_state.reqwf_issue_output)
+        issue_mermaid_code = _extract_mermaid_code(st.session_state.reqwf_issue_output)
+        if issue_mermaid_code:
+            st.markdown("#### Diagrama visual del issue")
+            _render_mermaid(issue_mermaid_code)
+
+        issue_markdown_clean = _remove_mermaid_blocks(st.session_state.reqwf_issue_output)
+        st.markdown(issue_markdown_clean)
+
+        pdf_bytes = _build_pdf_bytes(
+            "Requirement Workflow Issue",
+            st.session_state.reqwf_issue_output,
+        )
 
         st.download_button(
             "📥 Descargar ticket final (Markdown)",
             st.session_state.reqwf_issue_output,
             file_name="requirement_workflow_issue.md",
             mime="text/markdown",
+        )
+
+        st.download_button(
+            "📄 Descargar ticket final (PDF)",
+            pdf_bytes,
+            file_name="requirement_workflow_issue.pdf",
+            mime="application/pdf",
         )
 
         if st.button("🔄 Nuevo Requirement Workflow"):
