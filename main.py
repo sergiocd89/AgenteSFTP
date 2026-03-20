@@ -4,6 +4,7 @@ from utils import apply_custom_theme, get_openai_client
 from modulo_sftp import show_sftp_migration
 from modulo_cobol import show_cobol_migration
 from modulo_dtsx import show_dtsx_generation
+from modulo_Requirement_WorkFlow import show_requirement_workflow
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -64,7 +65,7 @@ if st.session_state.app_mode == "Portal":
     
     st.divider()
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     with col1:
         with st.container(border=True):
@@ -92,6 +93,8 @@ if st.session_state.app_mode == "Portal":
                 st.session_state.app_mode = "COBOL_Module"
                 st.rerun()
 
+    col3, col4 = st.columns(2)
+
     with col3:
         with st.container(border=True):
             st.markdown("### 📦 Módulo COBOL ➔ DTSX")
@@ -103,6 +106,19 @@ if st.session_state.app_mode == "Portal":
             """)
             if st.button("Generar Paquete DTSX", use_container_width=True, type="primary"):
                 st.session_state.app_mode = "DTSX_Module"
+                st.rerun()
+
+    with col4:
+        with st.container(border=True):
+            st.markdown("### 🧩 Módulo Requirement Workflow")
+            st.write("""
+            **Objetivo:** Transformar un requerimiento en un ticket técnico listo para ejecución.
+            - Ingreso de requerimiento mediante cuadro de texto.
+            - Carga de documentos de contexto (multiarchivo).
+            - Pipeline completo de agentes: creación, refinamiento, diagrama, sizing, QA e issue final.
+            """)
+            if st.button("Iniciar Requirement Workflow", use_container_width=True, type="primary"):
+                st.session_state.app_mode = "Requirement_Workflow_Module"
                 st.rerun()
 
     st.divider()
@@ -119,3 +135,7 @@ elif st.session_state.app_mode == "COBOL_Module":
 elif st.session_state.app_mode == "DTSX_Module":
     # Llamada al módulo de COBOL a DTSX
     show_dtsx_generation()
+
+elif st.session_state.app_mode == "Requirement_Workflow_Module":
+    # Llamada al módulo de Requirement Workflow
+    show_requirement_workflow()
