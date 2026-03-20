@@ -189,6 +189,7 @@ def show_requirement_workflow():
         "loaded_documents": [],
         "refactor_decision": "Sí",
         "refactor_feedback": "",
+        "refactor_history": [],
         "creator_output": "",
         "refiner_output": "",
         "refined_output": "",
@@ -263,7 +264,17 @@ def show_requirement_workflow():
                 st.rerun()
 
         if st.session_state.reqwf_creator_output:
-            st.info(st.session_state.reqwf_creator_output)
+            current_story = st.session_state.reqwf_refined_output or st.session_state.reqwf_creator_output
+            st.info(current_story)
+
+            if st.session_state.reqwf_refactor_history:
+                with st.expander(f"📋 Historial de refactorizaciones ({len(st.session_state.reqwf_refactor_history)})", expanded=False):
+                    for idx, entry in enumerate(st.session_state.reqwf_refactor_history, start=1):
+                        st.markdown(f"**Refactorización {idx}:**")
+                        st.text(entry)
+                        if idx < len(st.session_state.reqwf_refactor_history):
+                            st.divider()
+
             st.session_state.reqwf_refactor_decision = st.radio(
                 "¿Desea refactorizar la historia de usuario generada?",
                 options=["Sí", "No"],
@@ -281,41 +292,30 @@ def show_requirement_workflow():
             else:
                 st.session_state.reqwf_refactor_feedback = ""
 
-            if st.session_state.reqwf_current_step == 2 and st.button("Continuar ➔"):
-                if st.session_state.reqwf_refactor_decision == "Sí":
-                    st.session_state.reqwf_current_step = 3
-                else:
-                    st.session_state.reqwf_refiner_output = "Refactorización omitida por decisión del usuario."
-                    st.session_state.reqwf_refined_output = st.session_state.reqwf_creator_output
-                    st.session_state.reqwf_current_step = 4
+            if st.session_state.reqwf_refactor_decision == "Sí":
+                if st.button("Aplicar refactorización ➔", disabled=not st.session_state.reqwf_refactor_feedback.strip()):
+                    input_refiner = (
+                        f"Contexto original:\n{base_context}\n\n"
+                        f"Historia inicial:\n{current_story}\n\n"
+                        f"Correcciones solicitadas por el usuario:\n"
+                        f"{st.session_state.reqwf_refactor_feedback or 'Sin observaciones adicionales.'}"
+                    )
+                    st.session_state.reqwf_refiner_output = _run_agent(
+                        "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md",
+                        input_refiner,
+                    )
+                    st.session_state.reqwf_refined_output = st.session_state.reqwf_refiner_output
+                    st.session_state.reqwf_refactor_history.append(
+                        st.session_state.reqwf_refactor_feedback
+                    )
+                    st.session_state.reqwf_refactor_feedback = ""
+                    st.rerun()
+            elif st.button("Continuar sin más refactorización ➔"):
+                st.session_state.reqwf_current_step = 3
                 st.rerun()
 
-    if st.session_state.reqwf_current_step >= 3 and st.session_state.reqwf_refactor_decision == "Sí":
-        step_header("Paso 3: Agent 02 - Refinamiento de Historia")
-        if not st.session_state.reqwf_refiner_output:
-            if st.button("Ejecutar Refinamiento INVEST"):
-                input_refiner = (
-                    f"Contexto original:\n{base_context}\n\n"
-                    f"Historia inicial:\n{st.session_state.reqwf_creator_output}\n\n"
-                    f"Correcciones solicitadas por el usuario:\n"
-                    f"{st.session_state.reqwf_refactor_feedback or 'Sin observaciones adicionales.'}"
-                )
-                st.session_state.reqwf_refiner_output = _run_agent(
-                    "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md",
-                    input_refiner,
-                )
-                st.session_state.reqwf_refined_output = st.session_state.reqwf_refiner_output
-                st.rerun()
-
-        if st.session_state.reqwf_refiner_output:
-            st.warning(st.session_state.reqwf_refiner_output)
-
-        if st.session_state.reqwf_current_step == 3 and st.button("Aprobar historia y generar diagrama ➔"):
-            st.session_state.reqwf_current_step = 4
-            st.rerun()
-
-    if st.session_state.reqwf_current_step >= 4:
-        step_header("Paso 4: Agent 04 - Diagram Use Case")
+    if st.session_state.reqwf_current_step >= 3:
+        step_header("Paso 3: Agent 04 - Diagram Use Case")
         if not st.session_state.reqwf_diagram_output:
             st.session_state.reqwf_diagram_output = _run_agent(
                 "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
@@ -330,12 +330,12 @@ def show_requirement_workflow():
             st.warning("No se encontró un bloque Mermaid en la respuesta del agente. Mostrando salida textual.")
             st.markdown(st.session_state.reqwf_diagram_output)
 
-        if st.session_state.reqwf_current_step == 4 and st.button("Continuar a sizing técnico ➔"):
-            st.session_state.reqwf_current_step = 5
+        if st.session_state.reqwf_current_step == 3 and st.button("Continuar a sizing técnico ➔"):
+            st.session_state.reqwf_current_step = 4
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 5:
-        step_header("Paso 5: Agent 05 - Sizer")
+    if st.session_state.reqwf_current_step >= 4:
+        step_header("Paso 4: Agent 05 - Sizer")
         if not st.session_state.reqwf_sizer_output:
             st.session_state.reqwf_sizer_output = _run_agent(
                 "Agent_Requirement_WorkFlow_05_Sizer.md",
@@ -344,12 +344,12 @@ def show_requirement_workflow():
 
         st.info(st.session_state.reqwf_sizer_output)
 
-        if st.session_state.reqwf_current_step == 5 and st.button("Continuar a plan de pruebas ➔"):
-            st.session_state.reqwf_current_step = 6
+        if st.session_state.reqwf_current_step == 4 and st.button("Continuar a plan de pruebas ➔"):
+            st.session_state.reqwf_current_step = 5
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 6:
-        step_header("Paso 6: Agent 06 - Generator Test Case")
+    if st.session_state.reqwf_current_step >= 5:
+        step_header("Paso 5: Agent 06 - Generator Test Case")
         if not st.session_state.reqwf_qa_output:
             input_qa = (
                 f"Historia refinada:\n{st.session_state.reqwf_refined_output}\n\n"
@@ -362,12 +362,12 @@ def show_requirement_workflow():
 
         st.success(st.session_state.reqwf_qa_output)
 
-        if st.session_state.reqwf_current_step == 6 and st.button("Consolidar issue final ➔"):
-            st.session_state.reqwf_current_step = 7
+        if st.session_state.reqwf_current_step == 5 and st.button("Consolidar issue final ➔"):
+            st.session_state.reqwf_current_step = 6
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 7:
-        step_header("Paso 7: Agent 07 - Issue Formatter")
+    if st.session_state.reqwf_current_step >= 6:
+        step_header("Paso 6: Agent 07 - Issue Formatter")
         if not st.session_state.reqwf_issue_output:
             final_context = (
                 f"## Input original\n{base_context}\n\n"
