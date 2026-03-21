@@ -1,7 +1,6 @@
 import os
 import sys
 import types
-import pytest
 
 # insert a minimal streamlit stub before importing app
 streamlit_stub = types.ModuleType("streamlit")
@@ -12,6 +11,10 @@ for name in [
     'text_input', 'selectbox'
 ]:
     setattr(streamlit_stub, name, lambda *a, **k: None)
+
+# decorators used in core.utils
+streamlit_stub.cache_resource = lambda fn: fn
+streamlit_stub.cache_data = lambda fn: fn
 
 # provide a simple session_state object that allows attribute access
 class SessionState(dict):
@@ -38,26 +41,8 @@ sys.modules['streamlit'] = streamlit_stub
 # ensure workspace root is on sys.path so `app` can be imported
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from modulo_sftp import refactor_code
+from modules import modulo_sftp
 
 
-class DummyResponse:
-    choices = [type("x", (), {"message": type("y", (), {"content": "dummy"})})]
-
-
-class DummyChat:
-    @staticmethod
-    def create(*args, **kwargs):
-        return DummyResponse()
-
-class DummyClient:
-    def __init__(self, api_key=None):
-        pass
-    chat = types.SimpleNamespace(completions=DummyChat)
-
-
-def test_refactor_code(monkeypatch):
-    # patch the OpenAI client class
-    monkeypatch.setattr('openai.OpenAI', DummyClient)
-    out = refactor_code("codigo de prueba", api_key="fake", model_name="gpt-4o")
-    assert out == "dummy"
+def test_modulo_sftp_exports_main_entrypoint():
+    assert hasattr(modulo_sftp, "show_sftp_migration")

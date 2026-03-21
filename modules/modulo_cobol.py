@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import call_llm, load_agent_prompt, step_header
+from core.utils import call_llm, load_agent_prompt, step_header
 
 def show_cobol_migration():
     st.title("🐍 Migrador Cobol a Python")

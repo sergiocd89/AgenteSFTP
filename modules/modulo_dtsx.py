@@ -1,13 +1,13 @@
 import streamlit as st
 
-from dtsx_generator import (
+from modules.dtsx_generator import (
     build_dtsx_package,
     extract_database_connections,
     extract_sql_statements,
     infer_package_name,
     summarize_connections,
 )
-from utils import call_llm, load_agent_prompt, step_header
+from core.utils import call_llm, load_agent_prompt, step_header
 
 
 def show_dtsx_generation():

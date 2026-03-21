@@ -1,11 +1,27 @@
 import streamlit as st
 import openai
 import os
+import hashlib
+import hmac
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Cargamos variables de entorno una sola vez
 load_dotenv()
+
+# --- 0. AUTENTICACIÓN ---
+_USERS: dict[str, str] = {
+    "sergio.cuevas.d": hashlib.sha256("abcd.1234".encode()).hexdigest(),
+    "carlos.ramirez":  hashlib.sha256("abcd.1234".encode()).hexdigest(),
+}
+
+def check_credentials(username: str, password: str) -> bool:
+    """Verifica credenciales con comparación segura contra timing attacks."""
+    stored_hash = _USERS.get(username)
+    if not stored_hash:
+        return False
+    input_hash = hashlib.sha256(password.encode()).hexdigest()
+    return hmac.compare_digest(stored_hash, input_hash)
 
 # --- 1. CLIENTE DE IA ---
 @st.cache_resource

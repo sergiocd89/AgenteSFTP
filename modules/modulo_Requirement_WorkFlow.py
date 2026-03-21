@@ -2,7 +2,7 @@ from io import BytesIO
 
 import streamlit as st
 import streamlit.components.v1 as components
-from utils import call_llm, load_agent_prompt, step_header
+from core.utils import call_llm, load_agent_prompt, step_header
 
 
 def _extract_text_from_file(uploaded_file) -> str:

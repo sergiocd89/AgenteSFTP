@@ -1,10 +1,18 @@
 import streamlit as st
-from utils import apply_custom_theme, get_openai_client
+from core.utils import apply_custom_theme, get_openai_client
+from core.modulo_login import show_login, render_logout_button
+from core.modulo_perfil import (
+    get_user_modules,
+    has_module_access,
+    is_admin,
+    show_profile_admin,
+    MODULES,
+)
 # Importamos las funciones principales de tus módulos
-from modulo_sftp import show_sftp_migration
-from modulo_cobol import show_cobol_migration
-from modulo_dtsx import show_dtsx_generation
-from modulo_Requirement_WorkFlow import show_requirement_workflow
+from modules.modulo_sftp import show_sftp_migration
+from modules.modulo_cobol import show_cobol_migration
+from modules.modulo_dtsx import show_dtsx_generation
+from modules.modulo_Requirement_WorkFlow import show_requirement_workflow
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -13,7 +21,10 @@ st.set_page_config(
     page_icon="🏦"
 )
 
-# --- 2. INICIALIZACIÓN DE ESTADO GLOBAL ---
+# --- 2. AUTENTICACIÓN ---
+show_login()
+
+# --- 3. INICIALIZACIÓN DE ESTADO GLOBAL ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "Portal"
 
@@ -26,7 +37,10 @@ if "temp" not in st.session_state:
 # --- 3. SIDEBAR GLOBAL ---
 with st.sidebar:
     st.title("⚙️ Configuración Global")
-    
+    render_logout_button()
+
+    st.divider()
+
     # Selector de Tema
     theme = st.selectbox("Apariencia", ["Dark Mode", "Light Mode"], index=0)
     apply_custom_theme(theme)
@@ -53,89 +67,126 @@ with st.sidebar:
             st.session_state.app_mode = "Portal"
             st.rerun()
 
+    # Panel de administración de perfiles (solo para admins)
+    if is_admin(st.session_state.get("username", "")):
+        st.divider()
+        if st.button("👥 Administrar Perfiles", use_container_width=True):
+            st.session_state.app_mode = "Profile_Admin"
+            st.rerun()
+
     st.info("AS/400 Legacy Agent Migrator v2.0")
 
 # --- 4. LÓGICA DE NAVEGACIÓN (PORTAL VS MÓDULOS) ---
+
+_MODULE_CARDS: dict[str, dict] = {
+    "SFTP": {
+        "title":    "### 🔐 Módulo FTP ➔ SFTP",
+        "body": (
+            "**Objetivo:** Migración automática de comandos de transferencia inseguros.\n"
+            "- Analiza fuentes RPGLE y CL.\n"
+            "- Implementa protocolos SSH/SFTP.\n"
+            "- Genera auditoría de seguridad."
+        ),
+        "button":   "Iniciar Migración SFTP",
+        "app_mode": "SFTP_Module",
+    },
+    "COBOL": {
+        "title":    "### 🐍 Módulo COBOL ➔ Python",
+        "body": (
+            "**Objetivo:** Transposición de lógica de negocio legacy a Python moderno.\n"
+            "- Identifica párrafos y dependencias COBOL.\n"
+            "- Crea estructura de microservicios.\n"
+            "- Genera documentación técnica automática."
+        ),
+        "button":   "Iniciar Migración COBOL",
+        "app_mode": "COBOL_Module",
+    },
+    "DTSX": {
+        "title":    "### 📦 Módulo COBOL ➔ DTSX",
+        "body": (
+            "**Objetivo:** Generación asistida de paquetes SSIS a partir de COBOL con SQL Server y Sybase.\n"
+            "- Detecta bloques `EXEC SQL` y cadenas de conexión.\n"
+            "- Propone connection managers y control flow.\n"
+            "- Entrega un paquete `.dtsx` descargable."
+        ),
+        "button":   "Generar Paquete DTSX",
+        "app_mode": "DTSX_Module",
+    },
+    "RequirementWorkflow": {
+        "title":    "### 🧩 Módulo Requirement Workflow",
+        "body": (
+            "**Objetivo:** Transformar un requerimiento en un ticket técnico listo para ejecución.\n"
+            "- Ingreso de requerimiento mediante cuadro de texto.\n"
+            "- Carga de documentos de contexto (multiarchivo).\n"
+            "- Pipeline completo de agentes: creación, refinamiento, diagrama, sizing, QA e issue final."
+        ),
+        "button":   "Iniciar Requirement Workflow",
+        "app_mode": "Requirement_Workflow_Module",
+    },
+}
+
+_current_user = st.session_state.get("username", "")
 
 if st.session_state.app_mode == "Portal":
     # --- PÁGINA DE INICIO ---
     st.title("🏦 Scotia IA Agent Hub")
     st.subheader("Seleccione el flujo de modernización que desea ejecutar:")
     st.write("Herramientas agénticas especializadas en sistemas legacy.")
-    
     st.divider()
 
-    col1, col2 = st.columns(2)
+    allowed_modules = get_user_modules(_current_user)
+    visible_cards = [k for k in _MODULE_CARDS if k in allowed_modules]
 
-    with col1:
-        with st.container(border=True):
-            st.markdown("### 🔐 Módulo FTP ➔ SFTP")
-            st.write("""
-            **Objetivo:** Migración automática de comandos de transferencia inseguros.
-            - Analiza fuentes RPGLE y CL.
-            - Implementa protocolos SSH/SFTP.
-            - Genera auditoría de seguridad.
-            """)
-            if st.button("Iniciar Migración SFTP", use_container_width=True, type="primary"):
-                st.session_state.app_mode = "SFTP_Module"
-                st.rerun()
-
-    with col2:
-        with st.container(border=True):
-            st.markdown("### 🐍 Módulo COBOL ➔ Python")
-            st.write("""
-            **Objetivo:** Transposición de lógica de negocio legacy a Python moderno.
-            - Identifica párrafos y dependencias COBOL.
-            - Crea estructura de microservicios.
-            - Genera documentación técnica automática.
-            """)
-            if st.button("Iniciar Migración COBOL", use_container_width=True, type="primary"):
-                st.session_state.app_mode = "COBOL_Module"
-                st.rerun()
-
-    col3, col4 = st.columns(2)
-
-    with col3:
-        with st.container(border=True):
-            st.markdown("### 📦 Módulo COBOL ➔ DTSX")
-            st.write("""
-            **Objetivo:** Generación asistida de paquetes SSIS a partir de COBOL con SQL Server y Sybase.
-            - Detecta bloques `EXEC SQL` y cadenas de conexión.
-            - Propone connection managers y control flow.
-            - Entrega un paquete `.dtsx` descargable.
-            """)
-            if st.button("Generar Paquete DTSX", use_container_width=True, type="primary"):
-                st.session_state.app_mode = "DTSX_Module"
-                st.rerun()
-
-    with col4:
-        with st.container(border=True):
-            st.markdown("### 🧩 Módulo Requirement Workflow")
-            st.write("""
-            **Objetivo:** Transformar un requerimiento en un ticket técnico listo para ejecución.
-            - Ingreso de requerimiento mediante cuadro de texto.
-            - Carga de documentos de contexto (multiarchivo).
-            - Pipeline completo de agentes: creación, refinamiento, diagrama, sizing, QA e issue final.
-            """)
-            if st.button("Iniciar Requirement Workflow", use_container_width=True, type="primary"):
-                st.session_state.app_mode = "Requirement_Workflow_Module"
-                st.rerun()
+    if not visible_cards:
+        st.warning("🚫 No tienes acceso a ningún módulo. Contacta al administrador.")
+    else:
+        for row_start in range(0, len(visible_cards), 2):
+            row_keys = visible_cards[row_start:row_start + 2]
+            cols = st.columns(len(row_keys))
+            for col, key in zip(cols, row_keys):
+                card = _MODULE_CARDS[key]
+                with col:
+                    with st.container(border=True):
+                        st.markdown(card["title"])
+                        st.write(card["body"])
+                        if st.button(card["button"], use_container_width=True, type="primary", key=f"portal_btn_{key}"):
+                            st.session_state.app_mode = card["app_mode"]
+                            st.rerun()
 
     st.divider()
     st.caption("Ecosistema diseñado para arquitectos de sistemas IBM i.")
 
+elif st.session_state.app_mode == "Profile_Admin":
+    show_profile_admin()
+
 elif st.session_state.app_mode == "SFTP_Module":
-    # Llamada al módulo de SFTP
-    show_sftp_migration()
+    if has_module_access(_current_user, "SFTP"):
+        show_sftp_migration()
+    else:
+        st.error("🚫 No tienes acceso al módulo FTP ➔ SFTP.")
+        st.session_state.app_mode = "Portal"
+        st.rerun()
 
 elif st.session_state.app_mode == "COBOL_Module":
-    # Llamada al módulo de COBOL
-    show_cobol_migration()
+    if has_module_access(_current_user, "COBOL"):
+        show_cobol_migration()
+    else:
+        st.error("🚫 No tienes acceso al módulo COBOL ➔ Python.")
+        st.session_state.app_mode = "Portal"
+        st.rerun()
 
 elif st.session_state.app_mode == "DTSX_Module":
-    # Llamada al módulo de COBOL a DTSX
-    show_dtsx_generation()
+    if has_module_access(_current_user, "DTSX"):
+        show_dtsx_generation()
+    else:
+        st.error("🚫 No tienes acceso al módulo COBOL ➔ DTSX.")
+        st.session_state.app_mode = "Portal"
+        st.rerun()
 
 elif st.session_state.app_mode == "Requirement_Workflow_Module":
-    # Llamada al módulo de Requirement Workflow
-    show_requirement_workflow()
+    if has_module_access(_current_user, "RequirementWorkflow"):
+        show_requirement_workflow()
+    else:
+        st.error("🚫 No tienes acceso al módulo Requirement Workflow.")
+        st.session_state.app_mode = "Portal"
+        st.rerun()

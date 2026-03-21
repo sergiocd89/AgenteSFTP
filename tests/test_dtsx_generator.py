@@ -1,6 +1,6 @@
 from xml.etree import ElementTree
 
-from dtsx_generator import (
+from modules.dtsx_generator import (
     build_dtsx_package,
     extract_database_connections,
     extract_sql_statements,

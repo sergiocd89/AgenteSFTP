@@ -8,8 +8,6 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-env/
-venv/
 build/
 develop-eggs/
 dist/
@@ -86,12 +84,30 @@ celerybeat-schedule
 .env
 .env.*
 
-# virtualenv
-venv/
-ENV/
-
 # VS Code
 .vscode/
 
 # macOS
 .DS_Store
+
+# ---------------------------------------------------------
+# Estructura actual del proyecto (Python + Streamlit)
+# ---------------------------------------------------------
+
+# Entornos virtuales locales (incluye los usados en este repo)
+.env/
+env/
+.venv/
+venv/
+ENV/
+
+# Cache de Python por carpeta
+core/__pycache__/
+modules/__pycache__/
+tests/__pycache__/
+
+# Streamlit (secretos y artefactos locales)
+.streamlit/secrets.toml
+
+# Artefactos generados por la app
+*.pdf
