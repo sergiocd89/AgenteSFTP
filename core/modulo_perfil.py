@@ -21,6 +21,10 @@ MODULES: dict[str, dict] = {
         "label":    "🧩 Requirement Workflow",
         "app_mode": "Requirement_Workflow_Module",
     },
+    "Documentation": {
+        "label":    "📝 Documentación",
+        "app_mode": "Documentation_Module",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -28,8 +32,8 @@ MODULES: dict[str, dict] = {
 # Durante la sesión, el admin puede modificarlos y se persisten en session_state
 # ---------------------------------------------------------------------------
 _DEFAULT_PROFILES: dict[str, list[str]] = {
-    "sergio.cuevas.d": ["SFTP", "COBOL", "DTSX", "RequirementWorkflow"],
-    "carlos.ramirez":  ["SFTP", "RequirementWorkflow"],
+    "sergio.cuevas.d": ["SFTP", "COBOL", "DTSX", "RequirementWorkflow", "Documentation"],
+    "carlos.ramirez":  ["SFTP", "RequirementWorkflow", "Documentation"],
 }
 
 # Usuarios con rol administrador

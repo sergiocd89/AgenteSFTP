@@ -35,6 +35,7 @@ cd AgenteSFTP
 ```
 
 ```bash
+copy env.example .env
 python -m venv venv
 ```
 

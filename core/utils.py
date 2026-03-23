@@ -1,5 +1,6 @@
 import streamlit as st
 import openai
+import base64
 import os
 import hashlib
 import hmac
@@ -63,6 +64,25 @@ def call_llm(system_role: str, user_content: str, model: str, temp: float):
     except Exception as e:
         st.error(f"❌ Error en la llamada a la IA: {e}")
         return None
+
+def headers_jira():
+    # Headers JIRA
+    username = os.environ.get('JIRA_USER')
+    password = os.environ.get('JIRA_PASSWORD')
+    b64_auth_str = token_auth(username, password)
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Basic {b64_auth_str}'
+    }
+    return headers
+
+def token_auth(user, access):
+    # General el token de authenticate Base64
+    username = user
+    password = access
+    auth_str = f'{username}:{password}'
+    b64_auth_str = base64.b64encode(auth_str.encode()).decode()
+    return b64_auth_str
 
 # --- 4. INTERFAZ Y ESTILO ---
 def apply_custom_theme(theme: str) -> None:
