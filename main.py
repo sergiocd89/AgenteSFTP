@@ -1,7 +1,7 @@
 import streamlit as st
 from core.utils import apply_custom_theme, get_openai_client
-from core.modulo_login import show_login, render_logout_button
-from core.modulo_perfil import (
+from core.login import show_login, render_logout_button
+from core.perfil import (
     get_user_modules,
     has_module_access,
     is_admin,

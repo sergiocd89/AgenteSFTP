@@ -1,7 +1,9 @@
 from io import BytesIO
+import os
 
 import streamlit as st
 import streamlit.components.v1 as components
+from core import jira
 from core.utils import call_llm, load_agent_prompt, step_header
 
 
@@ -194,6 +196,10 @@ def show_requirement_workflow():
         "refiner_output": "",
         "refined_output": "",
         "diagram_output": "",
+        "jira_base_url": os.getenv("JIRA_BASE_URL", ""),
+        "jira_project_key": os.getenv("JIRA_PROJECT_KEY", ""),
+        "jira_issue_type": os.getenv("JIRA_ISSUE_TYPE", "Story"),
+        "jira_last_result": "",
         "sizer_output": "",
         "qa_output": "",
         "issue_output": "",
@@ -329,6 +335,61 @@ def show_requirement_workflow():
         else:
             st.warning("No se encontró un bloque Mermaid en la respuesta del agente. Mostrando salida textual.")
             st.markdown(st.session_state.reqwf_diagram_output)
+
+        with st.expander("⬆️ Publicar Historia Refinada + Modelo Secuencial en Jira", expanded=False):
+            st.caption("Se usa autenticación con variables de entorno JIRA_USER y JIRA_PASSWORD (email + API token).")
+
+            st.session_state.reqwf_jira_base_url = st.text_input(
+                "Jira Base URL",
+                value=st.session_state.reqwf_jira_base_url,
+                placeholder="https://tuempresa.atlassian.net",
+            ).strip()
+
+            st.session_state.reqwf_jira_project_key = st.text_input(
+                "Project Key",
+                value=st.session_state.reqwf_jira_project_key,
+                placeholder="PROJ",
+            ).strip().upper()
+
+            st.session_state.reqwf_jira_issue_type = st.selectbox(
+                "Issue Type",
+                ["Story", "Task", "Bug", "Epic"],
+                index=["Story", "Task", "Bug", "Epic"].index(
+                    st.session_state.reqwf_jira_issue_type
+                    if st.session_state.reqwf_jira_issue_type in ["Story", "Task", "Bug", "Epic"]
+                    else "Story"
+                ),
+            )
+
+            default_summary = "[US] " + (st.session_state.reqwf_requirement_text[:120] or "Historia Refinada")
+            jira_summary = st.text_input(
+                "Resumen del Issue",
+                value=default_summary,
+            )
+
+            jira_description = (
+                "Historia Refinada:\n"
+                f"{st.session_state.reqwf_refined_output}\n\n"
+                "Modelo Secuencial / Diagrama:\n"
+                f"{st.session_state.reqwf_diagram_output}"
+            )
+
+            if st.button("Crear Issue en Jira", use_container_width=True, key="reqwf_btn_create_jira"):
+                ok, message = jira.create_jira_issue(
+                    st.session_state.reqwf_jira_base_url,
+                    st.session_state.reqwf_jira_project_key,
+                    st.session_state.reqwf_jira_issue_type,
+                    jira_summary,
+                    jira_description,
+                )
+                st.session_state.reqwf_jira_last_result = message
+                if ok:
+                    st.success(message)
+                else:
+                    st.error(message)
+
+            if st.session_state.reqwf_jira_last_result and not st.session_state.reqwf_jira_last_result.startswith("Issue creado"):
+                st.caption("Último resultado Jira: " + st.session_state.reqwf_jira_last_result)
 
         if st.session_state.reqwf_current_step == 3 and st.button("Continuar a sizing técnico ➔"):
             st.session_state.reqwf_current_step = 4
