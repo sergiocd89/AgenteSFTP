@@ -1,5 +1,6 @@
 import streamlit as st
-from core.utils import call_llm, load_agent_prompt, step_header
+from core.ui.ai_presenter import run_llm_text
+from core.utils import load_agent_prompt, step_header
 
 def show_sftp_migration():
     st.title("🤖 Agente Migrador de Protocolos IBM i")
@@ -38,7 +39,7 @@ def show_sftp_migration():
         if st.session_state.sftp_current_step == 2:
             with st.spinner("Escaneando dependencias y comandos FTP..."):
                 sys_role = load_agent_prompt("01_analyst_AS400SFTP.md")
-                st.session_state.sftp_analysis = call_llm(
+                st.session_state.sftp_analysis = run_llm_text(
                     sys_role, st.session_state.sftp_source_code, 
                     st.session_state.model_name, st.session_state.temp
                 )
@@ -52,7 +53,7 @@ def show_sftp_migration():
         if st.session_state.sftp_current_step == 3:
             with st.container(border=True):
                 sys_role = load_agent_prompt("02_architect_AS400SFTP.md")
-                suggested_plan = call_llm(
+                suggested_plan = run_llm_text(
                     sys_role, st.session_state.sftp_analysis, 
                     st.session_state.model_name, st.session_state.temp
                 )
@@ -70,7 +71,7 @@ def show_sftp_migration():
             with st.spinner("Escribiendo código RPGLE/CL con SFTP..."):
                 sys_role = load_agent_prompt("03_developer_AS400SFTP.md")
                 prompt = f"Fuente Original:\n{st.session_state.sftp_source_code}\n\nPlan Aprobado:\n{st.session_state.sftp_plan}"
-                st.session_state.sftp_execution_code = call_llm(
+                st.session_state.sftp_execution_code = run_llm_text(
                     sys_role, prompt, st.session_state.model_name, st.session_state.temp
                 )
                 st.session_state.sftp_current_step = 5
@@ -83,7 +84,7 @@ def show_sftp_migration():
         if st.session_state.sftp_current_step == 5:
             with st.status("Verificando claves SSH y permisos...", expanded=True):
                 sys_role = load_agent_prompt("04_auditor_AS400SFTP.md")
-                st.session_state.sftp_validation_report = call_llm(
+                st.session_state.sftp_validation_report = run_llm_text(
                     sys_role, st.session_state.sftp_execution_code, 
                     st.session_state.model_name, st.session_state.temp
                 )

@@ -4,6 +4,7 @@ import os
 import sys
 import types
 import zipfile
+import pytest
 
 
 class SessionState(dict):
@@ -28,8 +29,13 @@ class UploadedFileStub:
 
 def _install_streamlit_stub():
     streamlit_stub = types.ModuleType("streamlit")
-    streamlit_stub.cache_resource = lambda fn: fn
-    streamlit_stub.cache_data = lambda fn: fn
+    def _cache_decorator_stub(*dargs, **dkwargs):
+        if dargs and callable(dargs[0]) and len(dargs) == 1 and not dkwargs:
+            return dargs[0]
+        return lambda fn: fn
+
+    streamlit_stub.cache_resource = _cache_decorator_stub
+    streamlit_stub.cache_data = _cache_decorator_stub
     streamlit_stub.session_state = SessionState({"model_name": "gpt-4o", "temp": 0.0})
 
     def _noop(*args, **kwargs):
@@ -86,3 +92,25 @@ def test_extract_from_zip_returns_empty_when_no_supported_files():
 
     assert content == ""
     assert "sin archivos de texto compatibles" in summary
+
+
+def test_extract_text_from_uploaded_file_requires_file_instance():
+    module = _import_doc_module()
+
+    with pytest.raises(ValueError):
+        module._extract_text_from_uploaded_file(None)
+
+
+def test_extract_text_from_uploaded_file_requires_positive_max_chars():
+    module = _import_doc_module()
+    uploaded = UploadedFileStub("sample.txt", b"hola")
+
+    with pytest.raises(ValueError):
+        module._extract_text_from_uploaded_file(uploaded, max_chars=0)
+
+
+def test_extract_from_zip_bytes_rejects_invalid_zip_content():
+    module = _import_doc_module()
+
+    with pytest.raises(ValueError):
+        module._extract_from_zip_bytes(b"not-a-zip", "broken.zip", 100)

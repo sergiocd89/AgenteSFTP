@@ -1,5 +1,6 @@
 import streamlit as st
-from core.utils import call_llm, load_agent_prompt, step_header
+from core.ui.ai_presenter import run_llm_text
+from core.utils import load_agent_prompt, step_header
 
 def show_cobol_migration():
     st.title("🐍 Migrador Cobol a Python")
@@ -40,7 +41,7 @@ def show_cobol_migration():
         if not st.session_state.cobol_analysis:
             if st.button("Ejecutar Agente Analista"):
                 sys_role = load_agent_prompt("01_analyst_CobolToPython.md")
-                st.session_state.cobol_analysis = call_llm(
+                st.session_state.cobol_analysis = run_llm_text(
                     sys_role, st.session_state.cobol_source_code, 
                     st.session_state.model_name, st.session_state.temp
                 )
@@ -59,7 +60,7 @@ def show_cobol_migration():
         if not st.session_state.cobol_arch_plan:
             sys_role = load_agent_prompt("02_architect_CobolToPython.md")
             context = f"Código COBOL:\n{st.session_state.cobol_source_code}\n\nAnálisis:\n{st.session_state.cobol_analysis}"
-            st.session_state.cobol_arch_plan = call_llm(
+            st.session_state.cobol_arch_plan = run_llm_text(
                 sys_role, context, st.session_state.model_name, st.session_state.temp
             )
         
@@ -80,7 +81,7 @@ def show_cobol_migration():
             with st.spinner("Traduciendo lógica COBOL a Python..."):
                 sys_role = load_agent_prompt("03_developer_CobolToPython.md")
                 context = f"Plan Aprobado:\n{st.session_state.cobol_arch_plan}\n\nFuente Original:\n{st.session_state.cobol_source_code}"
-                st.session_state.cobol_python_code = call_llm(
+                st.session_state.cobol_python_code = run_llm_text(
                     sys_role, context, st.session_state.model_name, st.session_state.temp
                 )
                 st.rerun()
@@ -99,7 +100,7 @@ def show_cobol_migration():
         # Auditoría automática si no existe
         if not st.session_state.cobol_audit_report:
             sys_role = load_agent_prompt("04_auditor_CobolToPython.md")
-            st.session_state.cobol_audit_report = call_llm(
+            st.session_state.cobol_audit_report = run_llm_text(
                 sys_role, st.session_state.cobol_python_code, 
                 st.session_state.model_name, st.session_state.temp
             )

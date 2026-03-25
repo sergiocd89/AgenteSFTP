@@ -15,9 +15,10 @@ def test_extract_page_id_from_link_path_format():
 
 
 def test_get_confluence_page_metadata_requires_valid_link_and_credentials():
-    ok, message = confluence.get_confluence_page_metadata_from_link("", "", "")
-    assert not ok
-    assert "link" in message.lower()
+    result = confluence.get_confluence_page_metadata_from_link("", "", "")
+    assert result["success"] is False
+    assert "link" in result["message"].lower()
+    assert result["data"] is None
 
 
 def test_get_confluence_page_metadata_success(monkeypatch):
@@ -34,17 +35,17 @@ def test_get_confluence_page_metadata_success(monkeypatch):
                 b'"ancestors":[{"id":"222"}]}'
             )
 
-    monkeypatch.setattr(confluence.urllib.request, "urlopen", lambda req, timeout=30: DummyResponse())
+    monkeypatch.setattr(confluence.urllib.request, "urlopen", lambda req, timeout=30, **kwargs: DummyResponse())
 
-    ok, payload = confluence.get_confluence_page_metadata_from_link(
+    result = confluence.get_confluence_page_metadata_from_link(
         "https://example.atlassian.net/wiki/pages/viewpage.action?pageId=12345",
         "user",
         "token",
     )
 
-    assert ok
-    assert payload["space_key"] == "ABC"
-    assert payload["parent_id"] == "222"
+    assert result["success"] is True
+    assert result["data"]["space_key"] == "ABC"
+    assert result["data"]["parent_id"] == "222"
 
 
 def test_upload_markdown_to_confluence_requires_data(monkeypatch):
@@ -53,9 +54,24 @@ def test_upload_markdown_to_confluence_requires_data(monkeypatch):
     monkeypatch.delenv("CONFLUENCE_USER", raising=False)
     monkeypatch.delenv("CONFLUENCE_API_TOKEN", raising=False)
 
-    ok, message = confluence.upload_markdown_to_confluence("Title", "Body")
-    assert not ok
-    assert "CONFLUENCE_BASE_URL" in message
+    result = confluence.upload_markdown_to_confluence("Title", "Body")
+    assert result["success"] is False
+    assert "CONFLUENCE_BASE_URL" in result["message"]
+
+
+def test_upload_markdown_to_confluence_invalid_base_url(monkeypatch):
+    monkeypatch.setenv("CONFLUENCE_BASE_URL", "ftp://example.atlassian.net/wiki")
+
+    result = confluence.upload_markdown_to_confluence(
+        "Title",
+        "Body",
+        space_key="ABC",
+        user="user",
+        api_token="token",
+    )
+
+    assert result["success"] is False
+    assert "URL válida" in result["message"] or "URL válida" in result["message"].replace("á", "a")
 
 
 def test_upload_markdown_to_confluence_success(monkeypatch):
@@ -71,9 +87,9 @@ def test_upload_markdown_to_confluence_success(monkeypatch):
         def read(self):
             return b'{"_links":{"webui":"/spaces/ABC/pages/12345"}}'
 
-    monkeypatch.setattr(confluence.urllib.request, "urlopen", lambda req, timeout=30: DummyResponse())
+    monkeypatch.setattr(confluence.urllib.request, "urlopen", lambda req, timeout=30, **kwargs: DummyResponse())
 
-    ok, message = confluence.upload_markdown_to_confluence(
+    result = confluence.upload_markdown_to_confluence(
         "Title",
         "Body",
         parent_id="321",
@@ -82,14 +98,15 @@ def test_upload_markdown_to_confluence_success(monkeypatch):
         api_token="token",
     )
 
-    assert ok
-    assert "Documento subido" in message
+    assert result["success"] is True
+    assert "Documento subido" in result["message"]
+    assert result["data"]["page_url"].endswith("/spaces/ABC/pages/12345")
 
 
 def test_upload_markdown_to_confluence_http_error(monkeypatch):
     monkeypatch.setenv("CONFLUENCE_BASE_URL", "https://example.atlassian.net/wiki")
 
-    def _raise_http_error(req, timeout=30):
+    def _raise_http_error(req, timeout=30, **kwargs):
         raise urllib.error.HTTPError(
             url="https://example.atlassian.net/wiki/rest/api/content",
             code=403,
@@ -100,7 +117,7 @@ def test_upload_markdown_to_confluence_http_error(monkeypatch):
 
     monkeypatch.setattr(confluence.urllib.request, "urlopen", _raise_http_error)
 
-    ok, message = confluence.upload_markdown_to_confluence(
+    result = confluence.upload_markdown_to_confluence(
         "Title",
         "Body",
         space_key="ABC",
@@ -108,5 +125,34 @@ def test_upload_markdown_to_confluence_http_error(monkeypatch):
         api_token="token",
     )
 
-    assert not ok
-    assert "HTTP 403" in message
+    assert result["success"] is False
+    assert "HTTP 403" in result["message"]
+    assert result["error_code"] == "http_error"
+
+
+def test_upload_markdown_to_confluence_invalid_json(monkeypatch):
+    monkeypatch.setenv("CONFLUENCE_BASE_URL", "https://example.atlassian.net/wiki")
+
+    class DummyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"{invalid-json"
+
+    monkeypatch.setattr(confluence.urllib.request, "urlopen", lambda req, timeout=30, **kwargs: DummyResponse())
+
+    result = confluence.upload_markdown_to_confluence(
+        "Title",
+        "Body",
+        space_key="ABC",
+        user="user",
+        api_token="token",
+    )
+
+    assert result["success"] is False
+    assert "JSON" in result["message"]
+    assert result["error_code"] == "invalid_json"

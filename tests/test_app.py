@@ -13,8 +13,14 @@ for name in [
     setattr(streamlit_stub, name, lambda *a, **k: None)
 
 # decorators used in core.utils
-streamlit_stub.cache_resource = lambda fn: fn
-streamlit_stub.cache_data = lambda fn: fn
+def _cache_decorator_stub(*dargs, **dkwargs):
+    if dargs and callable(dargs[0]) and len(dargs) == 1 and not dkwargs:
+        return dargs[0]
+    return lambda fn: fn
+
+
+streamlit_stub.cache_resource = _cache_decorator_stub
+streamlit_stub.cache_data = _cache_decorator_stub
 
 # provide a simple session_state object that allows attribute access
 class SessionState(dict):

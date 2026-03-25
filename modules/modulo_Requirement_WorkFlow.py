@@ -4,9 +4,9 @@ import re
 
 import streamlit as st
 import streamlit.components.v1 as components
-from core.confluence import get_confluence_page_metadata_from_link
-from core import jira
-from core.utils import call_llm, load_agent_prompt, step_header
+from core.domain.integration_service import publish_jira_issue, resolve_confluence_metadata
+from core.ui.ai_presenter import run_llm_text
+from core.utils import load_agent_prompt, step_header
 
 
 def _extract_text_from_file(uploaded_file) -> str:
@@ -51,7 +51,7 @@ def _build_documents_context(uploaded_files) -> tuple[str, list[str]]:
 def _run_agent(agent_filename: str, user_content: str) -> str:
     """Ejecuta un agente por archivo de prompt y maneja fallback de errores."""
     sys_role = load_agent_prompt(agent_filename)
-    result = call_llm(
+    result = run_llm_text(
         sys_role,
         user_content,
         st.session_state.model_name,
@@ -343,13 +343,13 @@ def show_requirement_workflow():
                 if not (confluence_link.strip() and confluence_user.strip() and confluence_password.strip()):
                     st.warning("Completa link, usuario y contraseña/token para consultar Confluence.")
                 else:
-                    ok_meta, result_meta = get_confluence_page_metadata_from_link(
+                    result_meta = resolve_confluence_metadata(
                         confluence_link.strip(),
                         confluence_user.strip(),
                         confluence_password.strip(),
                     )
-                    if ok_meta:
-                        metadata = result_meta
+                    if result_meta.get("success"):
+                        metadata = result_meta.get("data") or {}
                         st.session_state.reqwf_confluence_link = confluence_link.strip()
                         st.session_state.reqwf_confluence_user = confluence_user.strip()
                         st.session_state.reqwf_confluence_password = confluence_password.strip()
@@ -363,7 +363,7 @@ def show_requirement_workflow():
                             f"Parent ID: {st.session_state.reqwf_confluence_parent_id or 'N/D'}"
                         )
                     else:
-                        st.error(str(result_meta))
+                        st.error(result_meta.get("message", "No se pudo consultar Confluence."))
 
             if st.session_state.reqwf_confluence_space_key or st.session_state.reqwf_confluence_parent_id:
                 st.caption(
@@ -390,19 +390,22 @@ def show_requirement_workflow():
                         and confluence_password.strip()
                         and not st.session_state.reqwf_confluence_space_key
                     ):
-                        ok_meta, result_meta = get_confluence_page_metadata_from_link(
+                        result_meta = resolve_confluence_metadata(
                             confluence_link.strip(),
                             confluence_user.strip(),
                             confluence_password.strip(),
                         )
-                        if ok_meta:
-                            metadata = result_meta
+                        if result_meta.get("success"):
+                            metadata = result_meta.get("data") or {}
                             st.session_state.reqwf_confluence_space_key = metadata.get("space_key", "")
                             st.session_state.reqwf_confluence_parent_id = metadata.get("parent_id", "")
                             st.session_state.reqwf_confluence_page_title = metadata.get("title", "")
                             st.session_state.reqwf_confluence_page_id = metadata.get("page_id", "")
                         else:
-                            st.warning(f"No se pudo resolver metadata de Confluence: {result_meta}")
+                            st.warning(
+                                "No se pudo resolver metadata de Confluence: "
+                                f"{result_meta.get('message', 'error no especificado')}"
+                            )
 
                     st.session_state.reqwf_current_step = 2
                     st.rerun()
@@ -660,7 +663,7 @@ def show_requirement_workflow():
                         f"{diagram_text}"
                     )
 
-                    ok, message = jira.create_jira_issue(
+                    result = publish_jira_issue(
                         st.session_state.reqwf_jira_base_url,
                         st.session_state.reqwf_jira_project_key,
                         st.session_state.reqwf_jira_issue_type,
@@ -670,11 +673,13 @@ def show_requirement_workflow():
                         st.session_state.reqwf_jira_password,
                     )
 
-                    if ok:
+                    if result.get("success"):
                         ok_count += 1
-                        created.append(message)
+                        created.append(result.get("message", "Issue creado."))
                     else:
-                        errors.append(f"Historia {idx}: {message}")
+                        errors.append(
+                            f"Historia {idx}: {result.get('message', 'Error al crear issue en Jira.')}"
+                        )
 
                 result_lines = [
                     f"Publicación finalizada. Issues creados: {ok_count}/{len(st.session_state.reqwf_story_blocks)}."

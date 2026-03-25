@@ -148,6 +148,18 @@ Características de `k8s/app.prod.yaml`:
 - `securityContext` non-root a nivel de pod y contenedor.
 - Probes de liveness/readiness para despliegues y recuperación controlada.
 
+Si quieres exportarla a archivo:
+
+```bash
+docker save -o agentesftp-app.tar agentesftp-app:latest
+```
+
+Y luego podrías importarla en otra máquina con:
+
+```bash
+docker load -i agentesftp-app.tar
+```
+
 ## Estructura de Carpetas
 
 ```text

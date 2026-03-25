@@ -4,8 +4,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from core.confluence import upload_markdown_to_confluence
-from core.utils import call_llm, load_agent_prompt, step_header
+from core.domain.integration_service import publish_confluence_page
+from core.ui.ai_presenter import run_llm_text
+from core.utils import load_agent_prompt, step_header
 
 _TECH_OPTIONS = [
     "AS400",
@@ -48,6 +49,13 @@ _TEXT_EXTENSIONS = {
 
 def _extract_text_from_uploaded_file(uploaded_file, max_chars: int = 18000) -> tuple[str, str]:
     """Extrae contenido util para analisis desde archivo individual o paquete .zip."""
+    if uploaded_file is None:
+        raise ValueError("Debe proporcionar un archivo para procesar.")
+    if max_chars <= 0:
+        raise ValueError("max_chars debe ser mayor a 0.")
+    if not hasattr(uploaded_file, "name") or not hasattr(uploaded_file, "getvalue"):
+        raise ValueError("El archivo subido no tiene el formato esperado.")
+
     file_name = uploaded_file.name
     suffix = Path(file_name).suffix.lower()
 
@@ -68,42 +76,50 @@ def _extract_text_from_uploaded_file(uploaded_file, max_chars: int = 18000) -> t
 
 
 def _extract_from_zip_bytes(zip_bytes: bytes, file_name: str, max_chars: int) -> tuple[str, str]:
+    if not zip_bytes:
+        raise ValueError("El contenido ZIP está vacío.")
+    if max_chars <= 0:
+        raise ValueError("max_chars debe ser mayor a 0.")
+
     snippets: list[str] = []
     inspected_files = 0
     used_chars = 0
 
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        names = [n for n in zf.namelist() if not n.endswith("/")]
-        for member_name in names:
-            suffix = Path(member_name).suffix.lower()
-            if suffix not in _TEXT_EXTENSIONS:
-                continue
-
-            with zf.open(member_name) as member:
-                raw = member.read()
-
-            content = ""
-            for encoding in ("utf-8", "latin-1", "cp1252"):
-                try:
-                    content = raw.decode(encoding)
-                    break
-                except UnicodeDecodeError:
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = [n for n in zf.namelist() if not n.endswith("/")]
+            for member_name in names:
+                suffix = Path(member_name).suffix.lower()
+                if suffix not in _TEXT_EXTENSIONS:
                     continue
 
-            if not content:
-                content = raw.decode("utf-8", errors="ignore")
+                with zf.open(member_name) as member:
+                    raw = member.read()
 
-            if not content.strip():
-                continue
+                content = ""
+                for encoding in ("utf-8", "latin-1", "cp1252"):
+                    try:
+                        content = raw.decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
 
-            remaining = max_chars - used_chars
-            if remaining <= 0:
-                break
+                if not content:
+                    content = raw.decode("utf-8", errors="ignore")
 
-            snippet = content[: min(2500, remaining)]
-            snippets.append(f"### {member_name}\n{snippet}")
-            used_chars += len(snippet)
-            inspected_files += 1
+                if not content.strip():
+                    continue
+
+                remaining = max_chars - used_chars
+                if remaining <= 0:
+                    break
+
+                snippet = content[: min(2500, remaining)]
+                snippets.append(f"### {member_name}\n{snippet}")
+                used_chars += len(snippet)
+                inspected_files += 1
+    except zipfile.BadZipFile as exc:
+        raise ValueError("El archivo ZIP es inválido o está corrupto.") from exc
 
     if not snippets:
         return "", f"Paquete {file_name} sin archivos de texto compatibles para analisis."
@@ -196,7 +212,7 @@ def show_documentation_module() -> None:
                     "de modernización y próximos pasos.\n\n"
                     f"Contenido analizado:\n{st.session_state.doc_input_content}"
                 )
-                st.session_state.doc_analysis_output = call_llm(
+                st.session_state.doc_analysis_output = run_llm_text(
                     sys_role,
                     user_content,
                     st.session_state.model_name,
@@ -274,7 +290,7 @@ def show_documentation_module() -> None:
             )
 
         if st.button("⬆️ Subir a Confluence", use_container_width=True):
-            ok, message = upload_markdown_to_confluence(
+            result = publish_confluence_page(
                 confluence_title.strip() or f"Documentación - {safe_name}",
                 st.session_state.doc_analysis_output,
                 confluence_parent_id.strip() or None,
@@ -282,10 +298,10 @@ def show_documentation_module() -> None:
                 confluence_user.strip(),
                 confluence_api_token.strip(),
             )
-            if ok:
-                st.success(message)
+            if result.get("success"):
+                st.success(result.get("message", "Operación completada."))
             else:
-                st.error(message)
+                st.error(result.get("message", "Error al subir a Confluence."))
 
         if st.button("🔄 Nueva documentación"):
             for key, default_value in state_keys.items():

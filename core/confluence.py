@@ -2,9 +2,28 @@ import base64
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from core.logger import get_logger, log_operation
+
+
+def _result(success: bool, message: str, data: dict | None = None, error_code: str | None = None) -> dict:
+    return {
+        "success": success,
+        "message": message,
+        "data": data,
+        "error_code": error_code,
+    }
+
+
+logger = get_logger(__name__)
+
+
+def _is_valid_http_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse((url or "").strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def _confluence_headers(user: str, api_token: str) -> dict[str, str]:
@@ -16,6 +35,29 @@ def _confluence_headers(user: str, api_token: str) -> dict[str, str]:
     }
 
 
+def _request_with_retries(req: urllib.request.Request, timeout: int) -> bytes:
+    retries = int(os.getenv("HTTP_MAX_RETRIES", "2"))
+    backoff = float(os.getenv("HTTP_BACKOFF_SECONDS", "0.5"))
+
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            should_retry = exc.code in {429, 500, 502, 503, 504}
+            if should_retry and attempt < retries:
+                time.sleep(backoff * (2 ** attempt))
+                continue
+            raise
+        except urllib.error.URLError:
+            if attempt < retries:
+                time.sleep(backoff * (2 ** attempt))
+                continue
+            raise
+
+    return b""
+
+
 def upload_markdown_to_confluence(
     title: str,
     markdown_content: str,
@@ -23,7 +65,7 @@ def upload_markdown_to_confluence(
     space_key: str | None = None,
     user: str | None = None,
     api_token: str | None = None,
-) -> tuple[bool, str]:
+) -> dict:
     """Sube contenido markdown como pagina de Confluence.
 
     Prioriza credenciales recibidas por parametro y usa variables de entorno como fallback.
@@ -34,10 +76,17 @@ def upload_markdown_to_confluence(
     final_api_token = (api_token or os.getenv("CONFLUENCE_API_TOKEN", "")).strip()
 
     if not (base_url and final_space_key and final_user and final_api_token):
-        return False, (
+        result = _result(False, (
             "Faltan datos para Confluence. Revisa CONFLUENCE_BASE_URL y completa en pantalla "
             "(o por variables de entorno) CONFLUENCE_SPACE_KEY, CONFLUENCE_USER/CONFLUENCE_USER y CONFLUENCE_API_TOKEN."
-        )
+        ), error_code="validation_error")
+        log_operation(logger, "confluence_upload", False, result["error_code"], result["message"])
+        return result
+
+    if not _is_valid_http_url(base_url):
+        result = _result(False, "CONFLUENCE_BASE_URL no es una URL válida (http/https).", error_code="validation_error")
+        log_operation(logger, "confluence_upload", False, result["error_code"], result["message"])
+        return result
 
     api_url = f"{base_url}/rest/api/content"
     body: dict = {
@@ -62,19 +111,40 @@ def upload_markdown_to_confluence(
         method="POST",
     )
 
+    timeout = int(os.getenv("HTTP_TIMEOUT_SECONDS", "30"))
+
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            raw = response.read().decode("utf-8", errors="ignore")
+        raw_bytes = _request_with_retries(req, timeout=timeout)
+        raw = raw_bytes.decode("utf-8", errors="replace")
+        try:
             payload = json.loads(raw) if raw else {}
-            link = payload.get("_links", {}).get("webui", "")
-            if link:
-                return True, f"Documento subido exitosamente: {base_url}{link}"
-            return True, "Documento subido exitosamente a Confluence."
+        except json.JSONDecodeError:
+            result = _result(False, "Confluence respondió un JSON inválido.", error_code="invalid_json")
+            log_operation(logger, "confluence_upload", False, result["error_code"], result["message"])
+            return result
+
+        link = payload.get("_links", {}).get("webui", "")
+        data = {
+            "base_url": base_url,
+            "webui": link,
+            "page_url": f"{base_url}{link}" if link else "",
+        }
+        if link:
+            result = _result(True, f"Documento subido exitosamente: {base_url}{link}", data=data)
+            log_operation(logger, "confluence_upload", True)
+            return result
+        result = _result(True, "Documento subido exitosamente a Confluence.", data=data)
+        log_operation(logger, "confluence_upload", True)
+        return result
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        return False, f"Error Confluence HTTP {exc.code}: {detail}"
+        detail = exc.read().decode("utf-8", errors="replace")
+        result = _result(False, f"Error Confluence HTTP {exc.code}: {detail}", error_code="http_error")
+        log_operation(logger, "confluence_upload", False, result["error_code"], f"status={exc.code}")
+        return result
     except Exception as exc:
-        return False, f"Error al subir a Confluence: {exc}"
+        result = _result(False, f"Error al subir a Confluence: {exc}", error_code="unexpected_error")
+        log_operation(logger, "confluence_upload", False, result["error_code"], str(exc))
+        return result
 
 
 def _extract_page_id_from_link(page_url: str) -> str | None:
@@ -99,7 +169,7 @@ def get_confluence_page_metadata_from_link(
     page_url: str,
     user: str,
     api_token: str,
-) -> tuple[bool, dict | str]:
+) -> dict:
     """Obtiene metadata de una página de Confluence a partir de su link.
 
     Retorna base_url, page_id, title, space_key y parent_id.
@@ -109,15 +179,21 @@ def get_confluence_page_metadata_from_link(
     safe_token = (api_token or "").strip()
 
     if not (safe_url and safe_user and safe_token):
-        return False, "Debe completar link de Confluence, usuario y contraseña/token."
+        result = _result(False, "Debe completar link de Confluence, usuario y contraseña/token.", error_code="validation_error")
+        log_operation(logger, "confluence_metadata", False, result["error_code"], result["message"])
+        return result
 
     parsed = urllib.parse.urlparse(safe_url)
-    if not (parsed.scheme and parsed.netloc):
-        return False, "El link de Confluence no es valido."
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        result = _result(False, "El link de Confluence no es valido.", error_code="validation_error")
+        log_operation(logger, "confluence_metadata", False, result["error_code"], result["message"])
+        return result
 
     page_id = _extract_page_id_from_link(safe_url)
     if not page_id:
-        return False, "No se pudo extraer el pageId desde el link de Confluence."
+        result = _result(False, "No se pudo extraer el pageId desde el link de Confluence.", error_code="validation_error")
+        log_operation(logger, "confluence_metadata", False, result["error_code"], result["message"])
+        return result
 
     base_url = f"{parsed.scheme}://{parsed.netloc}"
     api_url = (
@@ -131,24 +207,37 @@ def get_confluence_page_metadata_from_link(
         method="GET",
     )
 
+    timeout = int(os.getenv("HTTP_TIMEOUT_SECONDS", "30"))
+
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            raw = response.read().decode("utf-8", errors="ignore")
+        raw_bytes = _request_with_retries(req, timeout=timeout)
+        raw = raw_bytes.decode("utf-8", errors="replace")
+        try:
             payload = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            result = _result(False, "Confluence respondió metadata con JSON inválido.", error_code="invalid_json")
+            log_operation(logger, "confluence_metadata", False, result["error_code"], result["message"])
+            return result
 
-            ancestors = payload.get("ancestors") or []
-            parent_id = str(ancestors[-1].get("id")) if ancestors else ""
+        ancestors = payload.get("ancestors") or []
+        parent_id = str(ancestors[-1].get("id")) if ancestors else ""
 
-            metadata = {
-                "base_url": base_url,
-                "page_id": str(payload.get("id") or page_id),
-                "title": payload.get("title") or "",
-                "space_key": (payload.get("space") or {}).get("key") or "",
-                "parent_id": parent_id,
-            }
-            return True, metadata
+        metadata = {
+            "base_url": base_url,
+            "page_id": str(payload.get("id") or page_id),
+            "title": payload.get("title") or "",
+            "space_key": (payload.get("space") or {}).get("key") or "",
+            "parent_id": parent_id,
+        }
+        result = _result(True, "Metadata de Confluence obtenida correctamente.", data=metadata)
+        log_operation(logger, "confluence_metadata", True)
+        return result
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        return False, f"Error Confluence HTTP {exc.code}: {detail}"
+        detail = exc.read().decode("utf-8", errors="replace")
+        result = _result(False, f"Error Confluence HTTP {exc.code}: {detail}", error_code="http_error")
+        log_operation(logger, "confluence_metadata", False, result["error_code"], f"status={exc.code}")
+        return result
     except Exception as exc:
-        return False, f"Error al consultar Confluence: {exc}"
+        result = _result(False, f"Error al consultar Confluence: {exc}", error_code="unexpected_error")
+        log_operation(logger, "confluence_metadata", False, result["error_code"], str(exc))
+        return result

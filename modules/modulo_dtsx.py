@@ -7,7 +7,8 @@ from modules.dtsx_generator import (
     infer_package_name,
     summarize_connections,
 )
-from core.utils import call_llm, load_agent_prompt, step_header
+from core.ui.ai_presenter import run_llm_text
+from core.utils import load_agent_prompt, step_header
 
 
 def show_dtsx_generation():
@@ -70,7 +71,7 @@ def show_dtsx_generation():
         if not st.session_state.dtsx_analysis:
             if st.button("Ejecutar agente analista DTSX"):
                 sys_role = load_agent_prompt("01_analyst_CobolToDtsx.md")
-                st.session_state.dtsx_analysis = call_llm(
+                st.session_state.dtsx_analysis = run_llm_text(
                     sys_role,
                     st.session_state.dtsx_source_code,
                     st.session_state.model_name,
@@ -93,7 +94,7 @@ def show_dtsx_generation():
                 f"Codigo COBOL:\n{st.session_state.dtsx_source_code}\n\n"
                 f"Analisis:\n{st.session_state.dtsx_analysis}"
             )
-            st.session_state.dtsx_plan = call_llm(
+            st.session_state.dtsx_plan = run_llm_text(
                 sys_role,
                 context,
                 st.session_state.model_name,
@@ -120,7 +121,7 @@ def show_dtsx_generation():
                     f"Plan aprobado:\n{st.session_state.dtsx_plan}\n\n"
                     f"Fuente COBOL:\n{st.session_state.dtsx_source_code}"
                 )
-                st.session_state.dtsx_developer_notes = call_llm(
+                st.session_state.dtsx_developer_notes = run_llm_text(
                     sys_role,
                     context,
                     st.session_state.model_name,
@@ -153,7 +154,7 @@ def show_dtsx_generation():
                 f"Blueprint:\n{st.session_state.dtsx_developer_notes}\n\n"
                 f"DTSX:\n{st.session_state.dtsx_dtsx_content}"
             )
-            st.session_state.dtsx_audit_report = call_llm(
+            st.session_state.dtsx_audit_report = run_llm_text(
                 sys_role,
                 audit_context,
                 st.session_state.model_name,

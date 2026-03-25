@@ -17,8 +17,13 @@ class SessionState(dict):
 
 def _install_streamlit_stub():
     streamlit_stub = types.ModuleType("streamlit")
-    streamlit_stub.cache_resource = lambda fn: fn
-    streamlit_stub.cache_data = lambda fn: fn
+    def _cache_decorator_stub(*dargs, **dkwargs):
+        if dargs and callable(dargs[0]) and len(dargs) == 1 and not dkwargs:
+            return dargs[0]
+        return lambda fn: fn
+
+    streamlit_stub.cache_resource = _cache_decorator_stub
+    streamlit_stub.cache_data = _cache_decorator_stub
     streamlit_stub.session_state = SessionState({"model_name": "gpt-4o", "temp": 0.0})
 
     def _noop(*args, **kwargs):

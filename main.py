@@ -1,5 +1,5 @@
 import streamlit as st
-from core.utils import apply_custom_theme, get_openai_client
+from core.logger import configure_logging
 from core.login import show_login, render_logout_button
 from core.perfil import (
     get_user_modules,
@@ -16,6 +16,8 @@ from modules.modulo_Requirement_WorkFlow import show_requirement_workflow
 from modules.modulo_documentation import show_documentation_module
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
+configure_logging()
+
 st.set_page_config(
     page_title="Scotia IA Agent Hub",
     layout="wide",

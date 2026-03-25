@@ -2,6 +2,16 @@ import streamlit as st
 from core.utils import check_credentials
 
 
+def _normalize_login_inputs(username: str, password: str) -> tuple[str, str]:
+    """Valida credenciales ingresadas y retorna username normalizado."""
+    normalized_username = (username or "").strip()
+    if not normalized_username:
+        raise ValueError("Debe ingresar un usuario.")
+    if not password:
+        raise ValueError("Debe ingresar una contraseña.")
+    return normalized_username, password
+
+
 def _init_auth_state() -> None:
     """Inicializa las claves de autenticación en session_state si no existen."""
     defaults = {
@@ -48,13 +58,22 @@ def show_login() -> None:
                     "Ingresar", use_container_width=True, type="primary"
                 )
                 if submitted:
-                    if check_credentials(username_input.strip(), password_input):
-                        st.session_state.logged_in = True
-                        st.session_state.username = username_input.strip()
-                        st.session_state.login_error = False
-                        st.rerun()
-                    else:
+                    try:
+                        normalized_username, normalized_password = _normalize_login_inputs(
+                            username_input,
+                            password_input,
+                        )
+                    except ValueError as exc:
                         st.session_state.login_error = True
+                        st.error(f"⚠️ {exc}")
+                    else:
+                        if check_credentials(normalized_username, normalized_password):
+                            st.session_state.logged_in = True
+                            st.session_state.username = normalized_username
+                            st.session_state.login_error = False
+                            st.rerun()
+                        else:
+                            st.session_state.login_error = True
 
         if st.session_state.login_error:
             st.error("⚠️ Usuario o contraseña incorrectos. Vuelva a intentarlo.")
