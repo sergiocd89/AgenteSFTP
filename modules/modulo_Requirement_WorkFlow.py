@@ -101,6 +101,36 @@ def _extract_story_title(story_text: str, index: int) -> str:
     return f"Historia {index}"
 
 
+def _build_diagram_output(diagrams: list[str]) -> str:
+    """Consolida salida de diagramas para uso en Jira/issue final."""
+    return "\n\n---\n\n".join(
+        [
+            f"### Diagrama Historia {idx}\n{diagram}"
+            for idx, diagram in enumerate(diagrams, start=1)
+        ]
+    )
+
+
+def _build_sizer_output(sizers: list[str]) -> str:
+    """Consolida salida de dimensionamiento para pasos posteriores."""
+    return "\n\n---\n\n".join(
+        [
+            f"### Sizing Historia {idx}\n{sizer}"
+            for idx, sizer in enumerate(sizers, start=1)
+        ]
+    )
+
+
+def _build_qa_output(qa_items: list[str]) -> str:
+    """Consolida salida de casos de prueba para pasos posteriores."""
+    return "\n\n---\n\n".join(
+        [
+            f"### QA Historia {idx}\n{qa_text}"
+            for idx, qa_text in enumerate(qa_items, start=1)
+        ]
+    )
+
+
 def _extract_mermaid_code(markdown_text: str) -> str:
     """Extrae el primer bloque ```mermaid ... ``` del texto del agente."""
     if not markdown_text:
@@ -247,13 +277,20 @@ def show_requirement_workflow():
         "refined_output": "",
         "diagram_output": "",
         "diagram_outputs": [],
+        "story_blocks": [],
         "story_titles": [],
         "diagram_source_signature": "",
         "jira_base_url": os.getenv("JIRA_BASE_URL", ""),
         "jira_project_key": os.getenv("JIRA_PROJECT_KEY", ""),
         "jira_issue_type": os.getenv("JIRA_ISSUE_TYPE", "Story"),
+        "jira_user": os.getenv("JIRA_USER", ""),
+        "jira_password": os.getenv("JIRA_PASSWORD", ""),
         "jira_last_result": "",
+        "sizer_outputs": [],
+        "sizer_source_signature": "",
         "sizer_output": "",
+        "qa_outputs": [],
+        "qa_source_signature": "",
         "qa_output": "",
         "issue_output": "",
     }
@@ -476,6 +513,7 @@ def show_requirement_workflow():
                 story_blocks = [story_source] if story_source else []
 
             diagrams: list[str] = []
+            kept_story_blocks: list[str] = []
             story_titles: list[str] = []
             for idx, story in enumerate(story_blocks, start=1):
                 if not story or not story.strip():
@@ -485,6 +523,7 @@ def show_requirement_workflow():
                     story,
                 )
                 diagrams.append(diagram)
+                kept_story_blocks.append(story)
                 story_titles.append(_extract_story_title(story, idx))
 
             if not diagrams and story_source:
@@ -494,17 +533,14 @@ def show_requirement_workflow():
                         story_source,
                     )
                 )
+                kept_story_blocks.append(story_source)
                 story_titles.append(_extract_story_title(story_source, 1))
 
             st.session_state.reqwf_diagram_outputs = diagrams
+            st.session_state.reqwf_story_blocks = kept_story_blocks
             st.session_state.reqwf_story_titles = story_titles
             st.session_state.reqwf_diagram_source_signature = source_signature
-            st.session_state.reqwf_diagram_output = "\n\n---\n\n".join(
-                [
-                    f"### Diagrama Historia {idx}\n{diagram}"
-                    for idx, diagram in enumerate(diagrams, start=1)
-                ]
-            )
+            st.session_state.reqwf_diagram_output = _build_diagram_output(diagrams)
 
         if not st.session_state.reqwf_diagram_outputs:
             st.warning(
@@ -527,65 +563,140 @@ def show_requirement_workflow():
                     )
                     st.markdown(diagram_output)
 
+                if st.button("Reinterpretar diagrama", key=f"reqwf_btn_reinterpret_{idx}"):
+                    story_input = (
+                        st.session_state.reqwf_story_blocks[idx - 1]
+                        if idx - 1 < len(st.session_state.reqwf_story_blocks)
+                        else story_source
+                    )
+                    regenerated = _run_agent(
+                        "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
+                        story_input,
+                    )
+                    st.session_state.reqwf_diagram_outputs[idx - 1] = regenerated
+                    st.session_state.reqwf_diagram_output = _build_diagram_output(
+                        st.session_state.reqwf_diagram_outputs
+                    )
+                    st.rerun()
+
         if st.session_state.reqwf_current_step == 3 and st.button("Continuar a publicación Jira ➔"):
             st.session_state.reqwf_current_step = 4
             st.rerun()
 
     if st.session_state.reqwf_current_step >= 4:
         step_header("Paso 4: Publicación en Jira")
-        st.caption("Se usa autenticación con variables de entorno JIRA_USER y JIRA_PASSWORD (usuario + API token).")
+        st.caption("Completa los datos de Jira para publicar todas las historias con su diagrama.")
 
+        # Fila 1: URL Jira completa
         st.session_state.reqwf_jira_base_url = st.text_input(
             "Jira Base URL",
             value=st.session_state.reqwf_jira_base_url,
             placeholder="https://tuempresa.atlassian.net",
         ).strip()
 
-        st.session_state.reqwf_jira_project_key = st.text_input(
-            "Project Key",
-            value=st.session_state.reqwf_jira_project_key,
-            placeholder="PROJ",
-        ).strip().upper()
-
-        st.session_state.reqwf_jira_issue_type = st.selectbox(
-            "Issue Type",
-            ["Story", "Task", "Bug", "Epic"],
-            index=["Story", "Task", "Bug", "Epic"].index(
-                st.session_state.reqwf_jira_issue_type
-                if st.session_state.reqwf_jira_issue_type in ["Story", "Task", "Bug", "Epic"]
-                else "Story"
-            ),
-        )
-
-        default_summary = "[US] " + (st.session_state.reqwf_requirement_text[:120] or "Historia Refinada")
-        jira_summary = st.text_input(
-            "Resumen del Issue",
-            value=default_summary,
-        )
-
-        jira_description = (
-            "Historia Refinada:\n"
-            f"{st.session_state.reqwf_refined_output}\n\n"
-            "Modelo Secuencial / Diagrama:\n"
-            f"{st.session_state.reqwf_diagram_output}"
-        )
-
-        if st.button("Crear Issue en Jira", use_container_width=True, key="reqwf_btn_create_jira"):
-            ok, message = jira.create_jira_issue(
-                st.session_state.reqwf_jira_base_url,
-                st.session_state.reqwf_jira_project_key,
-                st.session_state.reqwf_jira_issue_type,
-                jira_summary,
-                jira_description,
+        # Fila 2: Project Key + Issue Type
+        col_project, col_issue_type = st.columns(2)
+        with col_project:
+            st.session_state.reqwf_jira_project_key = st.text_input(
+                "Project Key",
+                value=st.session_state.reqwf_jira_project_key,
+                placeholder="PROJ",
+            ).strip().upper()
+        with col_issue_type:
+            st.session_state.reqwf_jira_issue_type = st.selectbox(
+                "Issue Type",
+                ["Story", "Task", "Bug", "Epic"],
+                index=["Story", "Task", "Bug", "Epic"].index(
+                    st.session_state.reqwf_jira_issue_type
+                    if st.session_state.reqwf_jira_issue_type in ["Story", "Task", "Bug", "Epic"]
+                    else "Story"
+                ),
             )
-            st.session_state.reqwf_jira_last_result = message
-            if ok:
-                st.success(message)
+
+        # Fila 3: JIRA_USER + JIRA_PASSWORD
+        col_user, col_password = st.columns(2)
+        with col_user:
+            st.session_state.reqwf_jira_user = st.text_input(
+                "JIRA_USER",
+                value=st.session_state.reqwf_jira_user,
+                placeholder="usuario@empresa.com",
+            ).strip()
+        with col_password:
+            st.session_state.reqwf_jira_password = st.text_input(
+                "JIRA_PASSWORD",
+                value=st.session_state.reqwf_jira_password,
+                type="password",
+                placeholder="API token / password",
+            ).strip()
+
+        total_histories = len(st.session_state.reqwf_story_blocks)
+        st.caption(f"Se publicarán {total_histories} historias usando el mismo Project Key.")
+
+        if st.button("Crear Issues en Jira (1 por historia)", use_container_width=True, key="reqwf_btn_create_jira"):
+            if not st.session_state.reqwf_story_blocks:
+                st.session_state.reqwf_jira_last_result = "No hay historias para publicar en Jira."
+                st.error(st.session_state.reqwf_jira_last_result)
             else:
-                st.error(message)
+                ok_count = 0
+                errors: list[str] = []
+                created: list[str] = []
+
+                for idx, story in enumerate(st.session_state.reqwf_story_blocks, start=1):
+                    title = (
+                        st.session_state.reqwf_story_titles[idx - 1]
+                        if idx - 1 < len(st.session_state.reqwf_story_titles)
+                        else f"Historia {idx}"
+                    )
+                    summary = f"[US-{idx:03d}] {title}"[:255]
+                    diagram_text = (
+                        st.session_state.reqwf_diagram_outputs[idx - 1]
+                        if idx - 1 < len(st.session_state.reqwf_diagram_outputs)
+                        else "Sin diagrama disponible para esta historia."
+                    )
+                    jira_description = (
+                        f"Historia de Usuario {idx}:\n"
+                        f"{story}\n\n"
+                        "Diagrama asociado:\n"
+                        f"{diagram_text}"
+                    )
+
+                    ok, message = jira.create_jira_issue(
+                        st.session_state.reqwf_jira_base_url,
+                        st.session_state.reqwf_jira_project_key,
+                        st.session_state.reqwf_jira_issue_type,
+                        summary,
+                        jira_description,
+                        st.session_state.reqwf_jira_user,
+                        st.session_state.reqwf_jira_password,
+                    )
+
+                    if ok:
+                        ok_count += 1
+                        created.append(message)
+                    else:
+                        errors.append(f"Historia {idx}: {message}")
+
+                result_lines = [
+                    f"Publicación finalizada. Issues creados: {ok_count}/{len(st.session_state.reqwf_story_blocks)}."
+                ]
+                if created:
+                    result_lines.extend(created)
+                if errors:
+                    result_lines.extend(errors)
+
+                st.session_state.reqwf_jira_last_result = "\n".join(result_lines)
+
+                if errors:
+                    st.error(st.session_state.reqwf_jira_last_result)
+                else:
+                    st.success(st.session_state.reqwf_jira_last_result)
 
         if st.session_state.reqwf_jira_last_result and not st.session_state.reqwf_jira_last_result.startswith("Issue creado"):
             st.caption("Último resultado Jira: " + st.session_state.reqwf_jira_last_result)
+
+        if st.session_state.reqwf_current_step == 4 and st.button("Omitir Jira y continuar ➔"):
+            st.session_state.reqwf_current_step = 5
+            st.rerun()
 
         if st.session_state.reqwf_current_step == 4 and st.button("Continuar a sizing técnico ➔"):
             st.session_state.reqwf_current_step = 5
@@ -593,13 +704,48 @@ def show_requirement_workflow():
 
     if st.session_state.reqwf_current_step >= 5:
         step_header("Paso 5: Agent 05 - Sizer")
-        if not st.session_state.reqwf_sizer_output:
-            st.session_state.reqwf_sizer_output = _run_agent(
-                "Agent_Requirement_WorkFlow_05_Sizer.md",
-                st.session_state.reqwf_refined_output,
+        sizer_story_blocks = st.session_state.reqwf_story_blocks or []
+        if not sizer_story_blocks:
+            fallback_story = (
+                st.session_state.reqwf_refined_output
+                or st.session_state.reqwf_creator_output
+                or st.session_state.reqwf_requirement_text
             )
+            sizer_story_blocks = [fallback_story] if fallback_story else []
 
-        st.info(st.session_state.reqwf_sizer_output)
+        sizer_signature = str(hash("\n\n".join(sizer_story_blocks))) if sizer_story_blocks else ""
+        needs_sizer_regeneration = (
+            not st.session_state.reqwf_sizer_outputs
+            or st.session_state.reqwf_sizer_source_signature != sizer_signature
+        )
+
+        if needs_sizer_regeneration:
+            sizers: list[str] = []
+            for story in sizer_story_blocks:
+                if not story or not story.strip():
+                    continue
+                sizers.append(
+                    _run_agent(
+                        "Agent_Requirement_WorkFlow_05_Sizer.md",
+                        story,
+                    )
+                )
+
+            st.session_state.reqwf_sizer_outputs = sizers
+            st.session_state.reqwf_sizer_source_signature = sizer_signature
+            st.session_state.reqwf_sizer_output = _build_sizer_output(sizers)
+
+        if not st.session_state.reqwf_sizer_outputs:
+            st.warning("No se pudo generar dimensionamiento para las historias disponibles.")
+        else:
+            for idx, sizer_text in enumerate(st.session_state.reqwf_sizer_outputs, start=1):
+                story_title = (
+                    st.session_state.reqwf_story_titles[idx - 1]
+                    if idx - 1 < len(st.session_state.reqwf_story_titles)
+                    else f"Historia {idx}"
+                )
+                st.markdown(f"#### Dimensionamiento - {story_title}")
+                st.info(sizer_text)
 
         if st.session_state.reqwf_current_step == 5 and st.button("Continuar a plan de pruebas ➔"):
             st.session_state.reqwf_current_step = 6
@@ -607,17 +753,63 @@ def show_requirement_workflow():
 
     if st.session_state.reqwf_current_step >= 6:
         step_header("Paso 6: Agent 06 - Generator Test Case")
-        if not st.session_state.reqwf_qa_output:
-            input_qa = (
-                f"Historia refinada:\n{st.session_state.reqwf_refined_output}\n\n"
-                f"Sizing:\n{st.session_state.reqwf_sizer_output}"
+        qa_story_blocks = st.session_state.reqwf_story_blocks or []
+        if not qa_story_blocks:
+            fallback_story = (
+                st.session_state.reqwf_refined_output
+                or st.session_state.reqwf_creator_output
+                or st.session_state.reqwf_requirement_text
             )
-            st.session_state.reqwf_qa_output = _run_agent(
-                "Agent_Requirement_WorkFlow_06_Generator_Test_Case.md",
-                input_qa,
-            )
+            qa_story_blocks = [fallback_story] if fallback_story else []
 
-        st.success(st.session_state.reqwf_qa_output)
+        qa_signature = str(hash(
+            "\n\n".join(qa_story_blocks)
+            + "\n\n"
+            + "\n\n".join(st.session_state.reqwf_sizer_outputs)
+        )) if qa_story_blocks else ""
+
+        needs_qa_regeneration = (
+            not st.session_state.reqwf_qa_outputs
+            or st.session_state.reqwf_qa_source_signature != qa_signature
+        )
+
+        if needs_qa_regeneration:
+            qa_items: list[str] = []
+            for idx, story in enumerate(qa_story_blocks, start=1):
+                if not story or not story.strip():
+                    continue
+
+                story_sizing = (
+                    st.session_state.reqwf_sizer_outputs[idx - 1]
+                    if idx - 1 < len(st.session_state.reqwf_sizer_outputs)
+                    else st.session_state.reqwf_sizer_output
+                )
+                input_qa = (
+                    f"Historia de usuario {idx}:\n{story}\n\n"
+                    f"Sizing de la historia {idx}:\n{story_sizing}"
+                )
+                qa_items.append(
+                    _run_agent(
+                        "Agent_Requirement_WorkFlow_06_Generator_Test_Case.md",
+                        input_qa,
+                    )
+                )
+
+            st.session_state.reqwf_qa_outputs = qa_items
+            st.session_state.reqwf_qa_source_signature = qa_signature
+            st.session_state.reqwf_qa_output = _build_qa_output(qa_items)
+
+        if not st.session_state.reqwf_qa_outputs:
+            st.warning("No se pudieron generar casos de prueba para las historias disponibles.")
+        else:
+            for idx, qa_text in enumerate(st.session_state.reqwf_qa_outputs, start=1):
+                story_title = (
+                    st.session_state.reqwf_story_titles[idx - 1]
+                    if idx - 1 < len(st.session_state.reqwf_story_titles)
+                    else f"Historia {idx}"
+                )
+                st.markdown(f"#### Casos de prueba - {story_title}")
+                st.success(qa_text)
 
         if st.session_state.reqwf_current_step == 6 and st.button("Consolidar issue final ➔"):
             st.session_state.reqwf_current_step = 7

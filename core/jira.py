@@ -11,10 +11,10 @@ def _token_auth(user: str, access: str) -> str:
     return base64.b64encode(auth_str.encode()).decode()
 
 
-def _headers_jira() -> dict[str, str]:
-    """Construye headers HTTP para Jira usando variables de entorno."""
-    username = os.environ.get("JIRA_USER", "")
-    password = os.environ.get("JIRA_PASSWORD", "")
+def _headers_jira(user: str | None = None, password: str | None = None) -> dict[str, str]:
+    """Construye headers HTTP para Jira usando credenciales UI o variables de entorno."""
+    username = (user or os.environ.get("JIRA_USER", "")).strip()
+    password = (password or os.environ.get("JIRA_PASSWORD", "")).strip()
     b64_auth_str = _token_auth(username, password)
     return {
         "Content-Type": "application/json",
@@ -47,10 +47,17 @@ def create_jira_issue(
     issue_type: str,
     summary: str,
     description_text: str,
+    jira_user: str | None = None,
+    jira_password: str | None = None,
 ) -> tuple[bool, str]:
     """Crea un issue en Jira Cloud usando autenticación Basic (user + token)."""
     if not base_url or not project_key:
         return False, "Debes indicar URL de Jira y Project Key."
+
+    effective_user = (jira_user or os.environ.get("JIRA_USER", "")).strip()
+    effective_password = (jira_password or os.environ.get("JIRA_PASSWORD", "")).strip()
+    if not effective_user or not effective_password:
+        return False, "Debes ingresar JIRA_USER y JIRA_PASSWORD para publicar en Jira."
 
     issue_endpoint = f"{base_url.rstrip('/')}/rest/api/3/issue"
     payload = {
@@ -65,7 +72,7 @@ def create_jira_issue(
     req = urllib.request.Request(
         issue_endpoint,
         data=json.dumps(payload).encode("utf-8"),
-        headers=_headers_jira(),
+        headers=_headers_jira(effective_user, effective_password),
         method="POST",
     )
 
