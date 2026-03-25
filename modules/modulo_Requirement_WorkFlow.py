@@ -1,8 +1,10 @@
 from io import BytesIO
 import os
+import re
 
 import streamlit as st
 import streamlit.components.v1 as components
+from core.confluence import get_confluence_page_metadata_from_link
 from core import jira
 from core.utils import call_llm, load_agent_prompt, step_header
 
@@ -56,6 +58,47 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
         st.session_state.temp,
     )
     return result or "No se pudo obtener respuesta del modelo en este paso."
+
+
+def _split_user_stories(refined_text: str) -> list[str]:
+    """Separa historias de usuario en bloques para diagramarlas individualmente."""
+    if not refined_text or not refined_text.strip():
+        return []
+
+    normalized = refined_text.strip()
+    # Regla principal: cada historia inicia con [US-00N], por ejemplo [US-001].
+    us_marker_pattern = re.compile(r"\[US-\d+\]", re.IGNORECASE)
+    matches = list(us_marker_pattern.finditer(normalized))
+    if len(matches) <= 1:
+        return [normalized]
+
+    chunks: list[str] = []
+    for idx, match in enumerate(matches):
+        start = match.start()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(normalized)
+        chunk = normalized[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+
+    return chunks or [normalized]
+
+
+def _extract_story_title(story_text: str, index: int) -> str:
+    """Obtiene un titulo legible para cada historia de usuario."""
+    if not story_text or not story_text.strip():
+        return f"Historia {index}"
+
+    for raw_line in story_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Elimina marcadores markdown comunes para usar el texto como titulo.
+        line = re.sub(r"^[#\-\*\d\.\)\s]+", "", line).strip()
+        if line:
+            return line[:120]
+
+    return f"Historia {index}"
 
 
 def _extract_mermaid_code(markdown_text: str) -> str:
@@ -189,6 +232,13 @@ def show_requirement_workflow():
         "requirement_text": "",
         "documents_context": "",
         "loaded_documents": [],
+        "confluence_link": "",
+        "confluence_user": "",
+        "confluence_password": "",
+        "confluence_space_key": "",
+        "confluence_parent_id": "",
+        "confluence_page_title": "",
+        "confluence_page_id": "",
         "refactor_decision": "Sí",
         "refactor_feedback": "",
         "refactor_history": [],
@@ -196,6 +246,9 @@ def show_requirement_workflow():
         "refiner_output": "",
         "refined_output": "",
         "diagram_output": "",
+        "diagram_outputs": [],
+        "story_titles": [],
+        "diagram_source_signature": "",
         "jira_base_url": os.getenv("JIRA_BASE_URL", ""),
         "jira_project_key": os.getenv("JIRA_PROJECT_KEY", ""),
         "jira_issue_type": os.getenv("JIRA_ISSUE_TYPE", "Story"),
@@ -214,7 +267,7 @@ def show_requirement_workflow():
     if st.session_state.reqwf_current_step == 1:
         with st.container(border=True):
             requirement_text = st.text_area(
-                "Ingrese el requerimiento principal",
+                "Ingrese la información base (texto libre)",
                 value=st.session_state.reqwf_requirement_text,
                 height=200,
                 placeholder=(
@@ -229,6 +282,59 @@ def show_requirement_workflow():
                 accept_multiple_files=True,
             )
 
+            st.markdown("#### Referencia desde Confluence (opcional)")
+            # Fila 3: usuario + password/token
+            col_user, col_token = st.columns(2)
+            with col_user:
+                confluence_user = st.text_input(
+                    "Usuario Confluence",
+                    value=st.session_state.reqwf_confluence_user,
+                    placeholder="usuario@empresa.com",
+                )
+            with col_token:
+                confluence_password = st.text_input(
+                    "Contraseña / API Token Confluence",
+                    value=st.session_state.reqwf_confluence_password,
+                    type="password",
+                )
+            confluence_link = st.text_input(
+                "Link de Confluence",
+                value=st.session_state.reqwf_confluence_link,
+                placeholder="https://tuempresa.atlassian.net/wiki/pages/viewpage.action?pageId=12345",
+            )
+            if st.button("Identificar space y parent ID desde link", use_container_width=True):
+                if not (confluence_link.strip() and confluence_user.strip() and confluence_password.strip()):
+                    st.warning("Completa link, usuario y contraseña/token para consultar Confluence.")
+                else:
+                    ok_meta, result_meta = get_confluence_page_metadata_from_link(
+                        confluence_link.strip(),
+                        confluence_user.strip(),
+                        confluence_password.strip(),
+                    )
+                    if ok_meta:
+                        metadata = result_meta
+                        st.session_state.reqwf_confluence_link = confluence_link.strip()
+                        st.session_state.reqwf_confluence_user = confluence_user.strip()
+                        st.session_state.reqwf_confluence_password = confluence_password.strip()
+                        st.session_state.reqwf_confluence_space_key = metadata.get("space_key", "")
+                        st.session_state.reqwf_confluence_parent_id = metadata.get("parent_id", "")
+                        st.session_state.reqwf_confluence_page_title = metadata.get("title", "")
+                        st.session_state.reqwf_confluence_page_id = metadata.get("page_id", "")
+                        st.success(
+                            "Confluence identificado. "
+                            f"Space: {st.session_state.reqwf_confluence_space_key or 'N/D'} | "
+                            f"Parent ID: {st.session_state.reqwf_confluence_parent_id or 'N/D'}"
+                        )
+                    else:
+                        st.error(str(result_meta))
+
+            if st.session_state.reqwf_confluence_space_key or st.session_state.reqwf_confluence_parent_id:
+                st.caption(
+                    "Confluence detectado - "
+                    f"Space: {st.session_state.reqwf_confluence_space_key or 'N/D'} | "
+                    f"Parent ID: {st.session_state.reqwf_confluence_parent_id or 'N/D'}"
+                )
+
             if st.button("Iniciar Workflow ➔", use_container_width=True, type="primary"):
                 if not requirement_text.strip():
                     st.warning("Debe ingresar un requerimiento antes de continuar.")
@@ -237,6 +343,30 @@ def show_requirement_workflow():
                     st.session_state.reqwf_requirement_text = requirement_text.strip()
                     st.session_state.reqwf_documents_context = docs_context
                     st.session_state.reqwf_loaded_documents = loaded_docs
+                    st.session_state.reqwf_confluence_link = confluence_link.strip()
+                    st.session_state.reqwf_confluence_user = confluence_user.strip()
+                    st.session_state.reqwf_confluence_password = confluence_password.strip()
+
+                    if (
+                        confluence_link.strip()
+                        and confluence_user.strip()
+                        and confluence_password.strip()
+                        and not st.session_state.reqwf_confluence_space_key
+                    ):
+                        ok_meta, result_meta = get_confluence_page_metadata_from_link(
+                            confluence_link.strip(),
+                            confluence_user.strip(),
+                            confluence_password.strip(),
+                        )
+                        if ok_meta:
+                            metadata = result_meta
+                            st.session_state.reqwf_confluence_space_key = metadata.get("space_key", "")
+                            st.session_state.reqwf_confluence_parent_id = metadata.get("parent_id", "")
+                            st.session_state.reqwf_confluence_page_title = metadata.get("title", "")
+                            st.session_state.reqwf_confluence_page_id = metadata.get("page_id", "")
+                        else:
+                            st.warning(f"No se pudo resolver metadata de Confluence: {result_meta}")
+
                     st.session_state.reqwf_current_step = 2
                     st.rerun()
     else:
@@ -256,7 +386,13 @@ def show_requirement_workflow():
     base_context = (
         f"## Requerimiento principal\n{st.session_state.reqwf_requirement_text}\n\n"
         f"## Documentos de contexto\n"
-        f"{st.session_state.reqwf_documents_context or 'No se adjuntaron documentos.'}"
+        f"{st.session_state.reqwf_documents_context or 'No se adjuntaron documentos.'}\n\n"
+        "## Contexto Confluence\n"
+        f"Link: {st.session_state.reqwf_confluence_link or 'No informado'}\n"
+        f"Space Key: {st.session_state.reqwf_confluence_space_key or 'No identificado'}\n"
+        f"Parent ID: {st.session_state.reqwf_confluence_parent_id or 'No identificado'}\n"
+        f"Page ID: {st.session_state.reqwf_confluence_page_id or 'No identificado'}\n"
+        f"Titulo pagina: {st.session_state.reqwf_confluence_page_title or 'No identificado'}"
     )
 
     if st.session_state.reqwf_current_step >= 2:
@@ -322,81 +458,141 @@ def show_requirement_workflow():
 
     if st.session_state.reqwf_current_step >= 3:
         step_header("Paso 3: Agent 04 - Diagram Use Case")
-        if not st.session_state.reqwf_diagram_output:
-            st.session_state.reqwf_diagram_output = _run_agent(
-                "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
-                st.session_state.reqwf_refined_output,
-            )
+        story_source = (
+            st.session_state.reqwf_refined_output
+            or st.session_state.reqwf_creator_output
+            or st.session_state.reqwf_requirement_text
+        )
+        source_signature = str(hash(story_source)) if story_source else ""
 
-        mermaid_code = _extract_mermaid_code(st.session_state.reqwf_diagram_output)
-        if mermaid_code:
-            st.markdown("#### Diagrama visual")
-            _render_mermaid(mermaid_code)
-        else:
-            st.warning("No se encontró un bloque Mermaid en la respuesta del agente. Mostrando salida textual.")
-            st.markdown(st.session_state.reqwf_diagram_output)
+        needs_regeneration = (
+            not st.session_state.reqwf_diagram_outputs
+            or st.session_state.reqwf_diagram_source_signature != source_signature
+        )
 
-        with st.expander("⬆️ Publicar Historia Refinada + Modelo Secuencial en Jira", expanded=False):
-            st.caption("Se usa autenticación con variables de entorno JIRA_USER y JIRA_PASSWORD (email + API token).")
+        if needs_regeneration:
+            story_blocks = _split_user_stories(story_source)
+            if not story_blocks:
+                story_blocks = [story_source] if story_source else []
 
-            st.session_state.reqwf_jira_base_url = st.text_input(
-                "Jira Base URL",
-                value=st.session_state.reqwf_jira_base_url,
-                placeholder="https://tuempresa.atlassian.net",
-            ).strip()
-
-            st.session_state.reqwf_jira_project_key = st.text_input(
-                "Project Key",
-                value=st.session_state.reqwf_jira_project_key,
-                placeholder="PROJ",
-            ).strip().upper()
-
-            st.session_state.reqwf_jira_issue_type = st.selectbox(
-                "Issue Type",
-                ["Story", "Task", "Bug", "Epic"],
-                index=["Story", "Task", "Bug", "Epic"].index(
-                    st.session_state.reqwf_jira_issue_type
-                    if st.session_state.reqwf_jira_issue_type in ["Story", "Task", "Bug", "Epic"]
-                    else "Story"
-                ),
-            )
-
-            default_summary = "[US] " + (st.session_state.reqwf_requirement_text[:120] or "Historia Refinada")
-            jira_summary = st.text_input(
-                "Resumen del Issue",
-                value=default_summary,
-            )
-
-            jira_description = (
-                "Historia Refinada:\n"
-                f"{st.session_state.reqwf_refined_output}\n\n"
-                "Modelo Secuencial / Diagrama:\n"
-                f"{st.session_state.reqwf_diagram_output}"
-            )
-
-            if st.button("Crear Issue en Jira", use_container_width=True, key="reqwf_btn_create_jira"):
-                ok, message = jira.create_jira_issue(
-                    st.session_state.reqwf_jira_base_url,
-                    st.session_state.reqwf_jira_project_key,
-                    st.session_state.reqwf_jira_issue_type,
-                    jira_summary,
-                    jira_description,
+            diagrams: list[str] = []
+            story_titles: list[str] = []
+            for idx, story in enumerate(story_blocks, start=1):
+                if not story or not story.strip():
+                    continue
+                diagram = _run_agent(
+                    "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
+                    story,
                 )
-                st.session_state.reqwf_jira_last_result = message
-                if ok:
-                    st.success(message)
+                diagrams.append(diagram)
+                story_titles.append(_extract_story_title(story, idx))
+
+            if not diagrams and story_source:
+                diagrams.append(
+                    _run_agent(
+                        "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
+                        story_source,
+                    )
+                )
+                story_titles.append(_extract_story_title(story_source, 1))
+
+            st.session_state.reqwf_diagram_outputs = diagrams
+            st.session_state.reqwf_story_titles = story_titles
+            st.session_state.reqwf_diagram_source_signature = source_signature
+            st.session_state.reqwf_diagram_output = "\n\n---\n\n".join(
+                [
+                    f"### Diagrama Historia {idx}\n{diagram}"
+                    for idx, diagram in enumerate(diagrams, start=1)
+                ]
+            )
+
+        if not st.session_state.reqwf_diagram_outputs:
+            st.warning(
+                "No se pudo generar un diagrama en este paso. Revisa la historia refinada o vuelve a generar el paso 2."
+            )
+        else:
+            for idx, diagram_output in enumerate(st.session_state.reqwf_diagram_outputs, start=1):
+                story_title = (
+                    st.session_state.reqwf_story_titles[idx - 1]
+                    if idx - 1 < len(st.session_state.reqwf_story_titles)
+                    else f"Historia {idx}"
+                )
+                st.markdown(f"#### {story_title}")
+                mermaid_code = _extract_mermaid_code(diagram_output)
+                if mermaid_code:
+                    _render_mermaid(mermaid_code)
                 else:
-                    st.error(message)
+                    st.warning(
+                        f"No se encontró un bloque Mermaid para la historia {idx}. Mostrando salida textual."
+                    )
+                    st.markdown(diagram_output)
 
-            if st.session_state.reqwf_jira_last_result and not st.session_state.reqwf_jira_last_result.startswith("Issue creado"):
-                st.caption("Último resultado Jira: " + st.session_state.reqwf_jira_last_result)
-
-        if st.session_state.reqwf_current_step == 3 and st.button("Continuar a sizing técnico ➔"):
+        if st.session_state.reqwf_current_step == 3 and st.button("Continuar a publicación Jira ➔"):
             st.session_state.reqwf_current_step = 4
             st.rerun()
 
     if st.session_state.reqwf_current_step >= 4:
-        step_header("Paso 4: Agent 05 - Sizer")
+        step_header("Paso 4: Publicación en Jira")
+        st.caption("Se usa autenticación con variables de entorno JIRA_USER y JIRA_PASSWORD (usuario + API token).")
+
+        st.session_state.reqwf_jira_base_url = st.text_input(
+            "Jira Base URL",
+            value=st.session_state.reqwf_jira_base_url,
+            placeholder="https://tuempresa.atlassian.net",
+        ).strip()
+
+        st.session_state.reqwf_jira_project_key = st.text_input(
+            "Project Key",
+            value=st.session_state.reqwf_jira_project_key,
+            placeholder="PROJ",
+        ).strip().upper()
+
+        st.session_state.reqwf_jira_issue_type = st.selectbox(
+            "Issue Type",
+            ["Story", "Task", "Bug", "Epic"],
+            index=["Story", "Task", "Bug", "Epic"].index(
+                st.session_state.reqwf_jira_issue_type
+                if st.session_state.reqwf_jira_issue_type in ["Story", "Task", "Bug", "Epic"]
+                else "Story"
+            ),
+        )
+
+        default_summary = "[US] " + (st.session_state.reqwf_requirement_text[:120] or "Historia Refinada")
+        jira_summary = st.text_input(
+            "Resumen del Issue",
+            value=default_summary,
+        )
+
+        jira_description = (
+            "Historia Refinada:\n"
+            f"{st.session_state.reqwf_refined_output}\n\n"
+            "Modelo Secuencial / Diagrama:\n"
+            f"{st.session_state.reqwf_diagram_output}"
+        )
+
+        if st.button("Crear Issue en Jira", use_container_width=True, key="reqwf_btn_create_jira"):
+            ok, message = jira.create_jira_issue(
+                st.session_state.reqwf_jira_base_url,
+                st.session_state.reqwf_jira_project_key,
+                st.session_state.reqwf_jira_issue_type,
+                jira_summary,
+                jira_description,
+            )
+            st.session_state.reqwf_jira_last_result = message
+            if ok:
+                st.success(message)
+            else:
+                st.error(message)
+
+        if st.session_state.reqwf_jira_last_result and not st.session_state.reqwf_jira_last_result.startswith("Issue creado"):
+            st.caption("Último resultado Jira: " + st.session_state.reqwf_jira_last_result)
+
+        if st.session_state.reqwf_current_step == 4 and st.button("Continuar a sizing técnico ➔"):
+            st.session_state.reqwf_current_step = 5
+            st.rerun()
+
+    if st.session_state.reqwf_current_step >= 5:
+        step_header("Paso 5: Agent 05 - Sizer")
         if not st.session_state.reqwf_sizer_output:
             st.session_state.reqwf_sizer_output = _run_agent(
                 "Agent_Requirement_WorkFlow_05_Sizer.md",
@@ -405,12 +601,12 @@ def show_requirement_workflow():
 
         st.info(st.session_state.reqwf_sizer_output)
 
-        if st.session_state.reqwf_current_step == 4 and st.button("Continuar a plan de pruebas ➔"):
-            st.session_state.reqwf_current_step = 5
+        if st.session_state.reqwf_current_step == 5 and st.button("Continuar a plan de pruebas ➔"):
+            st.session_state.reqwf_current_step = 6
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 5:
-        step_header("Paso 5: Agent 06 - Generator Test Case")
+    if st.session_state.reqwf_current_step >= 6:
+        step_header("Paso 6: Agent 06 - Generator Test Case")
         if not st.session_state.reqwf_qa_output:
             input_qa = (
                 f"Historia refinada:\n{st.session_state.reqwf_refined_output}\n\n"
@@ -423,12 +619,12 @@ def show_requirement_workflow():
 
         st.success(st.session_state.reqwf_qa_output)
 
-        if st.session_state.reqwf_current_step == 5 and st.button("Consolidar issue final ➔"):
-            st.session_state.reqwf_current_step = 6
+        if st.session_state.reqwf_current_step == 6 and st.button("Consolidar issue final ➔"):
+            st.session_state.reqwf_current_step = 7
             st.rerun()
 
-    if st.session_state.reqwf_current_step >= 6:
-        step_header("Paso 6: Agent 07 - Issue Formatter")
+    if st.session_state.reqwf_current_step >= 7:
+        step_header("Paso 7: Agent 07 - Issue Formatter")
         if not st.session_state.reqwf_issue_output:
             final_context = (
                 f"## Input original\n{base_context}\n\n"

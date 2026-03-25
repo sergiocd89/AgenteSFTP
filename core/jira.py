@@ -48,7 +48,7 @@ def create_jira_issue(
     summary: str,
     description_text: str,
 ) -> tuple[bool, str]:
-    """Crea un issue en Jira Cloud usando autenticación Basic (email + token)."""
+    """Crea un issue en Jira Cloud usando autenticación Basic (user + token)."""
     if not base_url or not project_key:
         return False, "Debes indicar URL de Jira y Project Key."
 

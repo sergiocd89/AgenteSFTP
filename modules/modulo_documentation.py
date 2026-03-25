@@ -224,21 +224,63 @@ def show_documentation_module() -> None:
 
         st.divider()
         st.markdown("#### Subir a repositorio en Confluence")
+
+        # Fila 1: titulo completo
         confluence_title = st.text_input(
             "Título de página en Confluence",
             value=f"Documentación - {safe_name}",
             key="doc_confluence_title",
         )
-        confluence_parent_id = st.text_input(
-            "ID página padre (opcional)",
-            key="doc_confluence_parent_id",
-        )
+
+        # Fila 2: space key + parent id
+        col_space, col_parent = st.columns(2)
+        with col_space:
+            confluence_space_key = st.text_input(
+                "Space Key",
+                key="doc_confluence_space_key",
+                placeholder="Ejemplo: CLMIGCLA",
+                help=(
+                    "Cómo obtenerlo desde la URL de Confluence: en rutas tipo "
+                    ".../spaces/CLMIGCLA/... el Space Key es CLMIGCLA. "
+                    "En algunos enlaces también aparece como parámetro spaceKey."
+                ),
+            )
+        with col_parent:
+            confluence_parent_id = st.text_input(
+                "ID página padre (opcional)",
+                key="doc_confluence_parent_id",
+                placeholder="Ejemplo: 32165487",
+                help=(
+                    "Cómo obtenerlo desde la URL: abre la página padre en Confluence "
+                    "y copia el valor numérico pageId del enlace, por ejemplo "
+                    "...viewpage.action?pageId=32165487."
+                ),
+            )
+
+        # Fila 3: usuario + password/token
+        col_user, col_token = st.columns(2)
+        with col_user:
+            confluence_user = st.text_input(
+                "Usuario",
+                key="doc_confluence_user",
+                placeholder="Ejemplo: SID9999999",
+            )
+        with col_token:
+            confluence_api_token = st.text_input(
+                "Password",
+                key="doc_confluence_api_token",
+                type="password",
+                placeholder="Ejemplo: abcdef1234567890",
+            )
 
         if st.button("⬆️ Subir a Confluence", use_container_width=True):
             ok, message = upload_markdown_to_confluence(
                 confluence_title.strip() or f"Documentación - {safe_name}",
                 st.session_state.doc_analysis_output,
                 confluence_parent_id.strip() or None,
+                confluence_space_key.strip(),
+                confluence_user.strip(),
+                confluence_api_token.strip(),
             )
             if ok:
                 st.success(message)
@@ -253,5 +295,8 @@ def show_documentation_module() -> None:
                 st.session_state[f"doc_tech_{tech}"] = False
 
             st.session_state.doc_confluence_title = ""
+            st.session_state.doc_confluence_space_key = ""
+            st.session_state.doc_confluence_user = ""
+            st.session_state.doc_confluence_api_token = ""
             st.session_state.doc_confluence_parent_id = ""
             st.rerun()

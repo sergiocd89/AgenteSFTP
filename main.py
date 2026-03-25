@@ -39,12 +39,6 @@ if "temp" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ Configuración Global")
     render_logout_button()
-
-    st.divider()
-
-    # Selector de Tema
-    theme = st.selectbox("Apariencia", ["Dark Mode", "Light Mode"], index=0)
-    apply_custom_theme(theme)
     
     st.divider()
     
