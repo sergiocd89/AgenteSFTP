@@ -3,8 +3,8 @@ import os
 import hashlib
 import hmac
 import json
-from pathlib import Path
 from dotenv import load_dotenv
+from core.infrastructure.prompt_repository import read_agent_prompt
 from core.logger import get_logger
 
 # Cargamos variables de entorno una sola vez
@@ -53,12 +53,8 @@ def check_credentials(username: str, password: str) -> bool:
 # --- 1. GESTIÓN DE PROMPTS ---
 @st.cache_data(ttl=3600)
 def load_agent_prompt(filename: str) -> str:
-    """Carga las instrucciones del agente desde la carpeta .github/agents."""
-    path = Path(".github/agents") / filename
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return "Eres un asistente experto en modernización legacy para IBM i."
+    """Carga en caché prompts de agente desde infraestructura."""
+    return read_agent_prompt(filename)
 
 def step_header(text: str) -> None:
     """Genera un encabezado visual consistente para los pasos del pipeline."""

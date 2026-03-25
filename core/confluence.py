@@ -9,13 +9,20 @@ import urllib.request
 from core.logger import get_logger, log_operation
 
 
-def _result(success: bool, message: str, data: dict | None = None, error_code: str | None = None) -> dict:
-    return {
+class ConfluenceResult(dict):
+    """Backward-compatible result for legacy tuple unpacking and dict access."""
+
+    def __iter__(self):
+        return iter((self.get("success"), self.get("message")))
+
+
+def _result(success: bool, message: str, data: dict | None = None, error_code: str | None = None) -> ConfluenceResult:
+    return ConfluenceResult({
         "success": success,
         "message": message,
         "data": data,
         "error_code": error_code,
-    }
+    })
 
 
 logger = get_logger(__name__)
