@@ -57,7 +57,7 @@ pip install -r requirements.txt
 Crea un archivo `.env` en la raíz del proyecto (puedes usar `.env.example` como base).
 
 | Variable | Requerida | Descripción | Ejemplo |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `OPENAI_API_KEY` | Sí | API key para llamadas al modelo LLM | `sk-...` |
 | `SECRET_KEY` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `your_secret_key_here` |
 | `DATABASE_URL` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `sqlite:///db.sqlite3` |
@@ -68,10 +68,91 @@ Ejemplo mínimo:
 OPENAI_API_KEY=sk-...
 ```
 
+## Contenedores y Kubernetes
+
+Esta solución puede ejecutarse en dos niveles de despliegue:
+
+- Contenedor local con Docker o Docker Compose.
+- Orquestación en clúster con Kubernetes usando manifiestos base o productivos.
+
+### Relación Entre Archivos
+
+| Archivo | Qué realiza | Cómo se relaciona |
+| --- | --- | --- |
+| `.dockerignore` | Excluye archivos innecesarios del contexto de build (venv, cachés, `.env`, etc.). | Reduce tamaño y tiempo de construcción del `Dockerfile`. |
+| `Dockerfile` | Construye la imagen de la app Streamlit e instala dependencias desde `requirements.txt`. | Es la base para `docker compose` y también para la imagen que consume Kubernetes. |
+| `docker-compose.yml` | Levanta la app como servicio local, publica el puerto `8501` y carga variables desde `.env`. | Usa el `Dockerfile` para build y sirve para pruebas o ambientes locales. |
+| `k8s/app.yaml` | Manifiesto base de Kubernetes (Namespace, Secret, ConfigMap, Deployment, Service, Ingress). | Lleva la misma app a clúster en modo estándar (no productivo endurecido). |
+| `k8s/app.prod.yaml` | Manifiesto productivo con 2 réplicas, rolling update y seguridad non-root. | Variante recomendada para operación estable en clúster. |
+
+### Flujo Docker y Kubernetes
+
+```mermaid
+flowchart TD
+    A[Codigo fuente + requirements.txt] --> B[Dockerfile]
+    B --> C[Imagen agentesftp-app]
+    C --> D[docker-compose.yml]
+    C --> E[k8s/app.yaml]
+    C --> F[k8s/app.prod.yaml]
+    D --> G[Ejecucion local en puerto 8501]
+    E --> H[Despliegue base en Kubernetes]
+    F --> I[Despliegue productivo en Kubernetes]
+```
+
+### Ejecución Local con Docker
+
+```bash
+docker build -t agentesftp-app:latest .
+docker run --rm -p 8501:8501 --env-file .env agentesftp-app:latest
+```
+
+Abrir en navegador:
+
+```text
+http://localhost:8501
+```
+
+### Ejecución Local con Docker Compose
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs -f app
+```
+
+Detener servicios:
+
+```bash
+docker compose down
+```
+
+### Despliegue en Kubernetes (Base)
+
+```bash
+kubectl apply -f k8s/app.yaml
+kubectl get pods,svc,ingress -n agentesftp
+```
+
+### Despliegue en Kubernetes (Producción)
+
+```bash
+kubectl apply -f k8s/app.prod.yaml
+kubectl rollout status deployment/agentesftp-app -n agentesftp
+kubectl get pods,svc,ingress -n agentesftp
+```
+
+Características de `k8s/app.prod.yaml`:
+
+- `replicas: 2` para alta disponibilidad básica.
+- Estrategia `RollingUpdate` con `maxSurge: 1` y `maxUnavailable: 0`.
+- `securityContext` non-root a nivel de pod y contenedor.
+- Probes de liveness/readiness para despliegues y recuperación controlada.
+
 ## Estructura de Carpetas
 
 ```text
 AgenteSFTP/
+├── .dockerignore
 ├── .github/
 │   └── agents/
 │       ├── 00_documentator_readme.md
@@ -96,6 +177,11 @@ AgenteSFTP/
 │   ├── test_app.py
 │   └── test_dtsx_generator.py
 ├── dtsx_generator.py
+├── docker-compose.yml
+├── Dockerfile
+├── k8s/
+│   ├── app.yaml
+│   └── app.prod.yaml
 ├── main.py
 ├── modulo_cobol.py
 ├── modulo_dtsx.py

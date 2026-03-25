@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentesftp
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentesftp-secret
+  namespace: agentesftp
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "reemplaza_aqui"
+  JIRA_USER: ""
+  JIRA_PASSWORD: ""
+  JIRA_BASE_URL: ""
+  JIRA_PROJECT_KEY: ""
+  JIRA_ISSUE_TYPE: "Story"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentesftp-config
+  namespace: agentesftp
+data:
+  APP_ENV: "production"
+  DEBUG: "False"
+  LOG_LEVEL: "INFO"
+  LLM_PROVIDER: "openai"
+  LLM_DEFAULT_MODEL: "gpt-4o"
+  LLM_TEMPERATURE: "0.0"
+  LLM_MAX_TOKENS: "4096"
+  LLM_TIMEOUT_SECONDS: "60"
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentesftp-app
+  namespace: agentesftp
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: agentesftp-app
+  template:
+    metadata:
+      labels:
+        app: agentesftp-app
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: agentesftp-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: agentesftp-config
+            - secretRef:
+                name: agentesftp-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 40
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentesftp-svc
+  namespace: agentesftp
+spec:
+  selector:
+    app: agentesftp-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8501
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentesftp-ingress
+  namespace: agentesftp
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: agentesftp.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentesftp-svc
+                port:
+                  number: 80
