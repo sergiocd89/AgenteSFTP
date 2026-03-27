@@ -1,4 +1,5 @@
 import io
+import re
 import zipfile
 from pathlib import Path
 
@@ -8,42 +9,391 @@ from core.domain.integration_service import publish_confluence_page
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
 
-_TECH_OPTIONS = [
-    "AS400",
-    "RPG",
-    "Cobol",
-    "Java",
-    "ASP",
-    "Visual Basic",
-    "JSF",
-    "React",
+_TECH_CATEGORIES = [
+    {
+        "id": "enterprise_platforms",
+        "title": "1. Plataformas / Sistemas Operativos Empresariales",
+        "tooltip": "Infraestructura de sistemas criticos, alta disponibilidad, procesamiento masivo.",
+        "items": [
+            "AS/400 / IBM i",
+            "Mainframe (z/OS)",
+            "Unix / AIX / Solaris",
+            "Linux (Red Hat, Ubuntu Server, SUSE)",
+            "Windows Server",
+            "AWS",
+            "Azure",
+            "Google Cloud Platform (GCP)",
+        ],
+    },
+    {
+        "id": "legacy_languages",
+        "title": "2. Lenguajes de Programacion Legacy / Empresariales",
+        "tooltip": "Alta estabilidad, sistemas core de negocio, dificiles de reemplazar directamente.",
+        "items": [
+            "RPG / RPGLE / Free RPG",
+            "COBOL",
+            "PLI",
+            "Fortran",
+            "CL (Control Language - IBM i)",
+            "Assembler (mainframe)",
+        ],
+    },
+    {
+        "id": "general_languages",
+        "title": "3. Lenguajes de Programacion de Proposito General",
+        "tooltip": "Backend, escritorio, servicios distribuidos, integraciones, ciencia de datos (Python).",
+        "items": [
+            "Java",
+            "C#",
+            "Python",
+            "Go (Golang)",
+            "Rust",
+            "Kotlin",
+            "Scala",
+            "Visual Basic .NET",
+            "C / C++",
+        ],
+    },
+    {
+        "id": "web_backend",
+        "title": "4. Tecnologias Web - Backend",
+        "tooltip": "Frameworks y plataformas para servicios y APIs empresariales.",
+        "items": [
+            "ASP.NET / ASP.NET Core",
+            "Spring / Spring Boot (Java)",
+            "Node.js",
+            "Express.js",
+            "NestJS",
+            "Django",
+            "Flask",
+            "Ruby on Rails",
+            "Laravel (PHP)",
+            "Quarkus / Micronaut",
+        ],
+    },
+    {
+        "id": "web_frontend",
+        "title": "5. Tecnologias Web - Frontend",
+        "tooltip": "Frameworks, tecnologias base y librerias de UI para interfaces web modernas.",
+        "items": [
+            "React",
+            "Angular",
+            "Vue.js",
+            "Svelte",
+            "Next.js",
+            "Nuxt.js",
+            "HTML5",
+            "CSS3",
+            "JavaScript",
+            "TypeScript",
+            "Bootstrap",
+            "Tailwind CSS",
+            "Material UI",
+            "Ant Design",
+        ],
+    },
+    {
+        "id": "js_ecosystem",
+        "title": "6. JavaScript y Ecosistema Asociado",
+        "tooltip": "Lenguaje, runtimes y herramientas del ecosistema JavaScript.",
+        "items": ["JavaScript (JS)", "TypeScript", "Node.js", "Deno", "Bun"],
+    },
+    {
+        "id": "databases",
+        "title": "7. Bases de Datos",
+        "tooltip": "Motores relacionales y NoSQL para persistencia, cache y busqueda empresarial.",
+        "items": [
+            "Oracle",
+            "PostgreSQL",
+            "MySQL",
+            "SQL Server",
+            "DB2",
+            "MariaDB",
+            "MongoDB",
+            "Redis",
+            "Cassandra",
+            "DynamoDB",
+            "Couchbase",
+            "ElasticSearch",
+        ],
+    },
 ]
 
-_TEXT_EXTENSIONS = {
+_COMMON_UPLOAD_EXTENSIONS = {
     ".txt",
     ".md",
     ".rst",
+    ".adoc",
     ".json",
+    ".jsonc",
     ".yaml",
     ".yml",
     ".xml",
     ".csv",
+    ".tsv",
     ".ini",
     ".cfg",
+    ".conf",
+    ".properties",
+    ".toml",
+    ".env",
     ".log",
+}
+
+_CATEGORY_EXTENSION_MAP: dict[str, set[str]] = {
+    "enterprise_platforms": {
+        ".sh",
+        ".bash",
+        ".ksh",
+        ".zsh",
+        ".ps1",
+        ".yaml",
+        ".yml",
+        ".json",
+        ".tf",
+        ".tfvars",
+        ".hcl",
+    },
+    "legacy_languages": {
+        ".rpg",
+        ".rpgle",
+        ".sqlrpgle",
+        ".cl",
+        ".clle",
+        ".cmd",
+        ".cbl",
+        ".cob",
+        ".cpy",
+        ".jcl",
+        ".bms",
+        ".pli",
+        ".pl1",
+        ".f",
+        ".f77",
+        ".f90",
+        ".asm",
+        ".s",
+        ".sql",
+    },
+    "general_languages": {
+        ".java",
+        ".cs",
+        ".py",
+        ".go",
+        ".rs",
+        ".kt",
+        ".kts",
+        ".scala",
+        ".vb",
+        ".c",
+        ".h",
+        ".hpp",
+        ".hh",
+        ".hxx",
+        ".cc",
+        ".cxx",
+        ".cpp",
+    },
+    "web_backend": {
+        ".java",
+        ".js",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".py",
+        ".php",
+        ".rb",
+        ".cs",
+        ".vb",
+        ".asp",
+        ".aspx",
+        ".cshtml",
+        ".razor",
+        ".jsp",
+        ".sql",
+        ".yaml",
+        ".yml",
+    },
+    "web_frontend": {
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".vue",
+        ".svelte",
+        ".json",
+    },
+    "js_ecosystem": {
+        ".js",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".json",
+        ".yaml",
+        ".yml",
+    },
+    "databases": {
+        ".sql",
+        ".ddl",
+        ".dml",
+        ".psql",
+        ".pls",
+        ".pkb",
+        ".pks",
+        ".prc",
+        ".fnc",
+        ".json",
+        ".yaml",
+        ".yml",
+    },
+}
+
+_TECH_TO_CATEGORY = {
+    tech: category["id"]
+    for category in _TECH_CATEGORIES
+    for tech in category["items"]
+}
+
+
+def _sanitize_key_fragment(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _tech_checkbox_key(category_id: str, tech_name: str) -> str:
+    safe_category = _sanitize_key_fragment(category_id)
+    safe_tech = _sanitize_key_fragment(tech_name)
+    return f"doc_tech_{safe_category}_{safe_tech}"
+
+
+def _build_uploader_types(selected_tech: list[str]) -> list[str]:
+    allowed_extensions = set(_COMMON_UPLOAD_EXTENSIONS)
+
+    for tech in selected_tech:
+        category_id = _TECH_TO_CATEGORY.get(tech)
+        if category_id:
+            allowed_extensions.update(_CATEGORY_EXTENSION_MAP.get(category_id, set()))
+
+    # streamlit espera extensiones sin punto en el parametro "type".
+    type_list = sorted({ext.lstrip(".") for ext in allowed_extensions if ext})
+    type_list.append("zip")
+    return type_list
+
+_TEXT_EXTENSIONS = {
+    # Documentacion y configuracion
+    ".txt",
+    ".md",
+    ".rst",
+    ".adoc",
+    ".conf",
+    ".json",
+    ".jsonc",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".tsv",
+    ".ini",
+    ".cfg",
+    ".properties",
+    ".toml",
+    ".env",
+    ".log",
+
+    # SQL y bases de datos
     ".sql",
-    ".py",
-    ".java",
+    ".ddl",
+    ".dml",
+    ".psql",
+    ".pls",
+    ".pkb",
+    ".pks",
+    ".prc",
+    ".fnc",
+
+    # Legacy / IBM i / Mainframe
+    ".rpg",
+    ".rpgle",
+    ".sqlrpgle",
+    ".cl",
+    ".clle",
+    ".cmd",
     ".cbl",
     ".cob",
-    ".rpgle",
-    ".cl",
+    ".cpy",
+    ".jcl",
+    ".bms",
+    ".pli",
+    ".pl1",
+    ".f",
+    ".f77",
+    ".f90",
+    ".asm",
+    ".s",
+
+    # Lenguajes de proposito general
+    ".py",
+    ".java",
+    ".cs",
+    ".vb",
+    ".go",
+    ".rs",
+    ".kt",
+    ".kts",
+    ".scala",
+    ".c",
+    ".h",
+    ".hpp",
+    ".hh",
+    ".hxx",
+    ".cc",
+    ".cxx",
+    ".cpp",
+
+    # Web backend y frontend
     ".js",
+    ".mjs",
+    ".cjs",
     ".ts",
     ".tsx",
+    ".jsx",
     ".jsp",
-    ".vb",
     ".asp",
+    ".aspx",
+    ".cshtml",
+    ".razor",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    ".php",
+    ".rb",
+
+    # Scripts y shell
+    ".sh",
+    ".bash",
+    ".ksh",
+    ".zsh",
+    ".ps1",
+
+    # Infraestructura / cloud
+    ".tf",
+    ".tfvars",
+    ".hcl",
+    ".dockerfile",
+    ".gradle",
+    ".maven",
 }
 
 
@@ -155,12 +505,18 @@ def show_documentation_module() -> None:
             st.write("Selecciona una o más tecnologías para contextualizar la documentación:")
 
             selected_tech: list[str] = []
-            cols = st.columns(4)
-            for idx, tech in enumerate(_TECH_OPTIONS):
-                with cols[idx % 4]:
-                    checked = st.checkbox(tech, key=f"doc_tech_{tech}")
-                    if checked:
-                        selected_tech.append(tech)
+            for category in _TECH_CATEGORIES:
+                with st.expander(category["title"], expanded=False):
+                    st.caption(category["tooltip"])
+                    cols = st.columns(4)
+                    for idx, tech in enumerate(category["items"]):
+                        with cols[idx % 4]:
+                            checked = st.checkbox(
+                                tech,
+                                key=_tech_checkbox_key(category["id"], tech),
+                            )
+                            if checked and tech not in selected_tech:
+                                selected_tech.append(tech)
 
             if st.button("Continuar a carga de archivo ➔", use_container_width=True, type="primary"):
                 if not selected_tech:
@@ -176,12 +532,10 @@ def show_documentation_module() -> None:
         step_header("Paso 2: Carga del Archivo o Paquete")
         if st.session_state.doc_current_step == 2:
             with st.container(border=True):
+                uploader_types = _build_uploader_types(st.session_state.doc_technologies)
                 uploaded = st.file_uploader(
                     "Sube un archivo de código o paquete .zip",
-                    type=[
-                        "txt", "md", "json", "yaml", "yml", "xml", "csv", "log", "sql",
-                        "py", "java", "cbl", "cob", "rpgle", "cl", "js", "ts", "tsx", "jsp", "vb", "asp", "zip",
-                    ],
+                    type=uploader_types,
                 )
 
                 if uploaded and st.button("Procesar y analizar ➔", use_container_width=True):
@@ -307,8 +661,9 @@ def show_documentation_module() -> None:
             for key, default_value in state_keys.items():
                 st.session_state[f"doc_{key}"] = default_value
 
-            for tech in _TECH_OPTIONS:
-                st.session_state[f"doc_tech_{tech}"] = False
+            for category in _TECH_CATEGORIES:
+                for tech in category["items"]:
+                    st.session_state[_tech_checkbox_key(category["id"], tech)] = False
 
             st.session_state.doc_confluence_title = ""
             st.session_state.doc_confluence_space_key = ""
