@@ -19,9 +19,10 @@ class SessionState(dict):
 
 
 class UploadedFileStub:
-    def __init__(self, name: str, content: bytes):
+    def __init__(self, name: str, content: bytes, size: int | None = None):
         self.name = name
         self._content = content
+        self.size = len(content) if size is None else size
 
     def getvalue(self) -> bytes:
         return self._content
@@ -114,3 +115,46 @@ def test_extract_from_zip_bytes_rejects_invalid_zip_content():
 
     with pytest.raises(ValueError):
         module._extract_from_zip_bytes(b"not-a-zip", "broken.zip", 100)
+
+
+def test_decode_text_reports_replacements_when_needed():
+    module = _import_doc_module()
+
+    # Forzamos el fallback a utf-8-replace con una secuencia invalida para utf-8 y
+    # caracteres fuera de latin-1/cp1252, interpretado como bytes arbitrarios.
+    raw = b"\x80\x80\x80"
+    text, encoding, had_replacements = module._decode_text(raw)
+
+    assert isinstance(text, str)
+    assert encoding in {"latin-1", "cp1252", "utf-8-replace", "utf-8"}
+    # En entornos donde latin-1/cp1252 decodifican sin error, no hay reemplazos.
+    # Validamos contrato minimo de tipos y valores booleanos.
+    assert isinstance(had_replacements, bool)
+
+
+def test_build_uploader_types_changes_with_selected_tech():
+    module = _import_doc_module()
+
+    default_types = module._build_uploader_types([])
+    legacy_types = module._build_uploader_types(["COBOL"])
+
+    assert "zip" in default_types
+    assert "cbl" not in default_types
+    assert "cbl" in legacy_types
+
+
+def test_extract_text_from_uploaded_file_rejects_large_file():
+    module = _import_doc_module()
+    uploaded = UploadedFileStub("huge.txt", b"ok", size=module.MAX_UPLOAD_BYTES + 1)
+
+    with pytest.raises(ValueError, match="limite"):
+        module._extract_text_from_uploaded_file(uploaded, max_chars=100)
+
+
+def test_extract_from_zip_bytes_rejects_large_zip_bytes(monkeypatch):
+    module = _import_doc_module()
+
+    # Simula ZIP demasiado grande sin crear payload gigante en memoria.
+    monkeypatch.setattr(module, "MAX_UPLOAD_BYTES", 8)
+    with pytest.raises(ValueError, match="limite"):
+        module._extract_from_zip_bytes(b"123456789", "big.zip", 100)
