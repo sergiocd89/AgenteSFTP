@@ -131,6 +131,17 @@ def _build_qa_output(qa_items: list[str]) -> str:
     )
 
 
+def _resolve_story_blocks_from_source(story_source: str) -> tuple[list[str], list[str]]:
+    """Construye historias y títulos desde una fuente textual para reutilizar en Jira."""
+    story_blocks = _split_user_stories(story_source)
+    if not story_blocks and story_source:
+        story_blocks = [story_source]
+
+    cleaned_blocks = [story.strip() for story in story_blocks if story and story.strip()]
+    story_titles = [_extract_story_title(story, idx) for idx, story in enumerate(cleaned_blocks, start=1)]
+    return cleaned_blocks, story_titles
+
+
 def _extract_mermaid_code(markdown_text: str) -> str:
     """Extrae el primer bloque ```mermaid ... ``` del texto del agente."""
     if not markdown_text:
@@ -277,6 +288,7 @@ def show_requirement_workflow():
         "refined_output": "",
         "diagram_output": "",
         "diagram_outputs": [],
+        "skip_diagram_step": False,
         "story_blocks": [],
         "story_titles": [],
         "diagram_source_signature": "",
@@ -492,11 +504,31 @@ def show_requirement_workflow():
                     )
                     st.session_state.reqwf_refactor_feedback = ""
                     st.rerun()
-            elif st.button("Continuar sin más refactorización ➔"):
-                st.session_state.reqwf_current_step = 3
-                st.rerun()
+            else:
+                col_continue, col_skip = st.columns(2)
+                with col_continue:
+                    if st.button("Continuar sin más refactorización ➔", use_container_width=True):
+                        st.session_state.reqwf_skip_diagram_step = False
+                        st.session_state.reqwf_current_step = 3
+                        st.rerun()
+                with col_skip:
+                    if st.button("Saltar Paso 3 (sin diagramas) ➔", use_container_width=True):
+                        story_source_skip = (
+                            st.session_state.reqwf_refined_output
+                            or st.session_state.reqwf_creator_output
+                            or st.session_state.reqwf_requirement_text
+                        )
+                        skip_blocks, skip_titles = _resolve_story_blocks_from_source(story_source_skip)
+                        st.session_state.reqwf_story_blocks = skip_blocks
+                        st.session_state.reqwf_story_titles = skip_titles
+                        st.session_state.reqwf_diagram_outputs = []
+                        st.session_state.reqwf_diagram_output = "Diagramas omitidos por decisión del usuario en Paso 2."
+                        st.session_state.reqwf_diagram_source_signature = ""
+                        st.session_state.reqwf_skip_diagram_step = True
+                        st.session_state.reqwf_current_step = 4
+                        st.rerun()
 
-    if st.session_state.reqwf_current_step >= 3:
+    if st.session_state.reqwf_current_step >= 3 and not st.session_state.reqwf_skip_diagram_step:
         step_header("Paso 3: Agent 04 - Diagram Use Case")
         story_source = (
             st.session_state.reqwf_refined_output
@@ -585,10 +617,16 @@ def show_requirement_workflow():
         if st.session_state.reqwf_current_step == 3 and st.button("Continuar a publicación Jira ➔"):
             st.session_state.reqwf_current_step = 4
             st.rerun()
+    elif st.session_state.reqwf_current_step >= 4 and st.session_state.reqwf_skip_diagram_step:
+        step_header("Paso 3: Agent 04 - Diagram Use Case")
+        st.info("Paso 3 omitido. Puedes continuar con la publicación en Jira sin diagramas.")
 
     if st.session_state.reqwf_current_step >= 4:
         step_header("Paso 4: Publicación en Jira")
-        st.caption("Completa los datos de Jira para publicar todas las historias con su diagrama.")
+        if st.session_state.reqwf_skip_diagram_step:
+            st.caption("Completa los datos de Jira para publicar historias sin diagramas.")
+        else:
+            st.caption("Completa los datos de Jira para publicar todas las historias con su diagrama.")
 
         # Fila 1: URL Jira completa
         st.session_state.reqwf_jira_base_url = st.text_input(
@@ -636,8 +674,29 @@ def show_requirement_workflow():
         st.caption(f"Se publicarán {total_histories} historias usando el mismo Project Key.")
 
         if st.button("Crear Issues en Jira (1 por historia)", use_container_width=True, key="reqwf_btn_create_jira"):
+            jira_base_url = st.session_state.reqwf_jira_base_url.strip()
+            jira_project_key = st.session_state.reqwf_jira_project_key.strip().upper()
+            jira_issue_type = st.session_state.reqwf_jira_issue_type.strip()
+            jira_user = st.session_state.reqwf_jira_user.strip()
+            jira_password = st.session_state.reqwf_jira_password.strip()
+
             if not st.session_state.reqwf_story_blocks:
                 st.session_state.reqwf_jira_last_result = "No hay historias para publicar en Jira."
+                st.error(st.session_state.reqwf_jira_last_result)
+            elif not jira_base_url or not jira_project_key or not jira_issue_type:
+                st.session_state.reqwf_jira_last_result = (
+                    "Completa Jira Base URL, Project Key e Issue Type antes de publicar."
+                )
+                st.error(st.session_state.reqwf_jira_last_result)
+            elif not jira_user or not jira_password:
+                st.session_state.reqwf_jira_last_result = (
+                    "Completa JIRA_USER y JIRA_PASSWORD antes de publicar."
+                )
+                st.error(st.session_state.reqwf_jira_last_result)
+            elif not re.match(r"^https?://", jira_base_url, flags=re.IGNORECASE):
+                st.session_state.reqwf_jira_last_result = (
+                    "Jira Base URL debe iniciar con http:// o https://."
+                )
                 st.error(st.session_state.reqwf_jira_last_result)
             else:
                 ok_count = 0
@@ -664,13 +723,13 @@ def show_requirement_workflow():
                     )
 
                     result = publish_jira_issue(
-                        st.session_state.reqwf_jira_base_url,
-                        st.session_state.reqwf_jira_project_key,
-                        st.session_state.reqwf_jira_issue_type,
+                        jira_base_url,
+                        jira_project_key,
+                        jira_issue_type,
                         summary,
                         jira_description,
-                        st.session_state.reqwf_jira_user,
-                        st.session_state.reqwf_jira_password,
+                        jira_user,
+                        jira_password,
                     )
 
                     if result.get("success"):

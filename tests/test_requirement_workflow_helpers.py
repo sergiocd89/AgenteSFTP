@@ -103,3 +103,16 @@ def test_remove_mermaid_blocks_strips_mermaid_code():
     assert "flowchart TD" not in cleaned
     assert "inicio" in cleaned
     assert "fin" in cleaned
+
+
+def test_resolve_story_blocks_from_source_builds_titles():
+    workflow = _import_workflow_module()
+    source = "[US-001] Alta de cliente\nDetalle A\n[US-002] Baja de cliente\nDetalle B"
+
+    blocks, titles = workflow._resolve_story_blocks_from_source(source)
+
+    assert len(blocks) == 2
+    assert blocks[0].startswith("[US-001]")
+    assert blocks[1].startswith("[US-002]")
+    assert len(titles) == 2
+    assert "Alta de cliente" in titles[0]
