@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import random
 import time
 import urllib.error
 import urllib.parse
@@ -18,6 +19,30 @@ def _result(success: bool, message: str, data: dict | None = None, error_code: s
 
 
 logger = get_logger(__name__)
+
+
+def _safe_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+        if parsed < 0:
+            return None
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_retry_delay(attempt: int, backoff: float, retry_after: str | None = None) -> float:
+    retry_after_seconds = _safe_float(retry_after)
+    if retry_after_seconds is not None:
+        # Jira puede responder 429 con Retry-After; se prioriza ese valor.
+        return min(retry_after_seconds, 60.0)
+
+    # Exponential backoff con jitter suave para evitar thundering herd.
+    base_delay = backoff * (2 ** attempt)
+    jitter = random.uniform(0.0, backoff)
+    return min(base_delay + jitter, 60.0)
 
 
 def _token_auth(user: str, access: str) -> str:
@@ -39,7 +64,7 @@ def _headers_jira(user: str | None = None, password: str | None = None) -> dict[
 
 
 def _request_with_retries(req: urllib.request.Request, timeout: int) -> bytes:
-    retries = int(os.getenv("HTTP_MAX_RETRIES", "2"))
+    retries = int(os.getenv("HTTP_MAX_RETRIES", "4"))
     backoff = float(os.getenv("HTTP_BACKOFF_SECONDS", "0.5"))
 
     for attempt in range(retries + 1):
@@ -49,12 +74,26 @@ def _request_with_retries(req: urllib.request.Request, timeout: int) -> bytes:
         except urllib.error.HTTPError as exc:
             should_retry = exc.code in {429, 500, 502, 503, 504}
             if should_retry and attempt < retries:
-                time.sleep(backoff * (2 ** attempt))
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                wait_seconds = _compute_retry_delay(attempt, backoff, retry_after)
+                logger.warning(
+                    "operation=jira_http_retry | status=retrying | details=status=%s attempt=%s wait=%.2fs",
+                    exc.code,
+                    attempt + 1,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
                 continue
             raise
         except urllib.error.URLError:
             if attempt < retries:
-                time.sleep(backoff * (2 ** attempt))
+                wait_seconds = _compute_retry_delay(attempt, backoff)
+                logger.warning(
+                    "operation=jira_http_retry | status=retrying | details=status=url_error attempt=%s wait=%.2fs",
+                    attempt + 1,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
                 continue
             raise
 
