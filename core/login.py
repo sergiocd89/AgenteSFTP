@@ -157,6 +157,21 @@ def run_backend_operation_with_retry(
     return operation(token)
 
 
+def render_backend_session_status() -> None:
+    """Muestra aviso cuando el backend está habilitado pero no hay sesión backend válida."""
+    if not backend_api_client.is_backend_enabled():
+        return
+
+    if not st.session_state.get("logged_in", False):
+        return
+
+    has_valid_backend_session = ensure_backend_token_fresh(min_ttl_seconds=60)
+    if not has_valid_backend_session:
+        st.warning(
+            "⚠️ Backend API activo sin token válido. Cierra sesión e inicia nuevamente para restablecer integración."
+        )
+
+
 def render_change_password_section() -> None:
     """Renderiza sección para cambio de contraseña del usuario autenticado."""
     username = (st.session_state.get("username", "") or "").strip()

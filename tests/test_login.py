@@ -38,6 +38,7 @@ class _FakeStreamlit:
         self._logout_click = logout_click
         self.errors = []
         self.successes = []
+        self.warnings = []
 
     def markdown(self, *args, **kwargs):
         return None
@@ -79,6 +80,9 @@ class _FakeStreamlit:
 
     def success(self, message):
         self.successes.append(message)
+
+    def warning(self, message):
+        self.warnings.append(message)
 
     def stop(self):
         raise _StopCalled()
@@ -278,3 +282,24 @@ def test_run_backend_operation_with_retry_on_auth_error(monkeypatch):
     assert ok is True
     assert payload == "ok:new-token"
     assert attempts["n"] == 2
+
+
+def test_render_backend_session_status_warns_when_backend_token_invalid(monkeypatch):
+    fake_st = _FakeStreamlit(initial_state={"logged_in": True, "backend_access_token": ""})
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+    monkeypatch.setattr(login, "ensure_backend_token_fresh", lambda **_kwargs: False, raising=True)
+
+    login.render_backend_session_status()
+
+    assert any("token válido" in msg for msg in fake_st.warnings)
+
+
+def test_render_backend_session_status_noop_when_backend_disabled(monkeypatch):
+    fake_st = _FakeStreamlit(initial_state={"logged_in": True})
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: False, raising=True)
+
+    login.render_backend_session_status()
+
+    assert fake_st.warnings == []

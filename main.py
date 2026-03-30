@@ -1,7 +1,12 @@
 import streamlit as st
 from dotenv import load_dotenv
 from core.logger import configure_logging
-from core.login import show_login, render_logout_button, render_change_password_section
+from core.login import (
+    show_login,
+    render_logout_button,
+    render_change_password_section,
+    render_backend_session_status,
+)
 from core.perfil import (
     get_user_modules,
     has_module_access,
@@ -44,6 +49,7 @@ with st.sidebar:
     st.title("⚙️ Configuración Global")
     render_logout_button()
     render_change_password_section()
+    render_backend_session_status()
     
     st.divider()
     
