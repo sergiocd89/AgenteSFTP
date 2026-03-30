@@ -28,3 +28,102 @@ def test_check_credentials_invalid_password(monkeypatch):
 def test_step_header_requires_non_empty_text():
 	with pytest.raises(ValueError):
 		utils.step_header("   ")
+
+
+def test_check_credentials_uses_postgres_provider(monkeypatch):
+	class _FakeCursor:
+		def __enter__(self):
+			return self
+
+		def __exit__(self, exc_type, exc, tb):
+			return False
+
+		def execute(self, query, params):
+			self.query = query
+			self.params = params
+
+		def fetchone(self):
+			return (True,)
+
+	class _FakeConnection:
+		def __enter__(self):
+			return self
+
+		def __exit__(self, exc_type, exc, tb):
+			return False
+
+		def cursor(self):
+			return _FakeCursor()
+
+	class _FakePsycopg:
+		@staticmethod
+		def connect(_dsn):
+			return _FakeConnection()
+
+	monkeypatch.setenv("AUTH_PROVIDER", "postgres")
+	monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+	monkeypatch.setattr(utils, "psycopg", _FakePsycopg, raising=True)
+
+	assert utils.check_credentials("tester", "secret") is True
+
+
+def test_check_credentials_postgres_returns_false_on_connection_error(monkeypatch):
+	class _BrokenPsycopg:
+		@staticmethod
+		def connect(_dsn):
+			raise RuntimeError("db offline")
+
+	monkeypatch.setenv("AUTH_PROVIDER", "postgres")
+	monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+	monkeypatch.setattr(utils, "psycopg", _BrokenPsycopg, raising=True)
+
+	assert utils.check_credentials("tester", "secret") is False
+
+
+def test_check_credentials_uses_sqlserver_provider(monkeypatch):
+	class _FakeCursor:
+		def execute(self, *_args):
+			return None
+
+		def fetchone(self):
+			return (1,)
+
+	class _FakeConnection:
+		def __enter__(self):
+			return self
+
+		def __exit__(self, exc_type, exc, tb):
+			return False
+
+		def cursor(self):
+			return _FakeCursor()
+
+	class _FakePyodbc:
+		@staticmethod
+		def connect(_conn_str, timeout=5):
+			return _FakeConnection()
+
+	monkeypatch.setenv("AUTH_PROVIDER", "sqlserver")
+	monkeypatch.setenv("SQLSERVER_HOST", "localhost")
+	monkeypatch.setenv("SQLSERVER_DATABASE", "agente_db")
+	monkeypatch.setenv("SQLSERVER_USER", "sa")
+	monkeypatch.setenv("SQLSERVER_PASSWORD", "secret")
+	monkeypatch.setattr(utils, "pyodbc", _FakePyodbc, raising=True)
+
+	assert utils.check_credentials("tester", "secret") is True
+
+
+def test_check_credentials_sqlserver_returns_false_on_connection_error(monkeypatch):
+	class _BrokenPyodbc:
+		@staticmethod
+		def connect(_conn_str, timeout=5):
+			raise RuntimeError("sqlserver offline")
+
+	monkeypatch.setenv("AUTH_PROVIDER", "sqlserver")
+	monkeypatch.setenv("SQLSERVER_HOST", "localhost")
+	monkeypatch.setenv("SQLSERVER_DATABASE", "agente_db")
+	monkeypatch.setenv("SQLSERVER_USER", "sa")
+	monkeypatch.setenv("SQLSERVER_PASSWORD", "secret")
+	monkeypatch.setattr(utils, "pyodbc", _BrokenPyodbc, raising=True)
+
+	assert utils.check_credentials("tester", "secret") is False

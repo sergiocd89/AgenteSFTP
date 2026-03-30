@@ -1,4 +1,5 @@
 import streamlit as st
+from dotenv import load_dotenv
 from core.logger import configure_logging
 from core.login import show_login, render_logout_button
 from core.perfil import (
@@ -16,6 +17,7 @@ from modules.modulo_Requirement_WorkFlow import show_requirement_workflow
 from modules.modulo_documentation import show_documentation_module
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
+load_dotenv()
 configure_logging()
 
 st.set_page_config(

@@ -1,4 +1,17 @@
 services:
+  postgres:
+    image: postgres:18.3
+    container_name: agente-postgres
+    environment:
+      POSTGRES_DB: agente_db
+      POSTGRES_USER: agente_user
+      POSTGRES_PASSWORD: agente_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   app:
     build: .
     container_name: agente-sftp
@@ -6,4 +19,12 @@ services:
       - "8501:8501"
     env_file:
       - .env
+    environment:
+      AUTH_PROVIDER: postgres
+      DATABASE_URL: postgresql://agente_user:agente_password@postgres:5432/agente_db
+    depends_on:
+      - postgres
     restart: unless-stopped
+
+volumes:
+  postgres_data:

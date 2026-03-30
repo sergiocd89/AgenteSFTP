@@ -53,16 +53,42 @@ class _FakeStreamlit:
     def container(self, *args, **kwargs):
         return _Ctx()
 
+    def expander(self, *args, **kwargs):
+        return _Ctx()
+
+    def form(self, *args, **kwargs):
+        return _Ctx()
+
     def columns(self, specs):
         return [_Ctx() for _ in specs]
 
+    def text_input(self, *args, **kwargs):
+        return kwargs.get("value", "")
+
+    def multiselect(self, *args, **kwargs):
+        return kwargs.get("default", [])
+
+    def form_submit_button(self, *args, **kwargs):
+        return False
+
+    def button(self, *args, **kwargs):
+        return False
+
     def checkbox(self, label, value=False, key=None):
         return self._checkbox_values.get(key, value)
+
+    def rerun(self):
+        return None
 
 
 def test_get_user_modules_and_access(monkeypatch):
     fake_st = _FakeStreamlit()
     monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+    monkeypatch.setenv(
+        "USER_PROFILES_JSON",
+        '{"sergio.cuevas.d":["SFTP","COBOL","DTSX","RequirementWorkflow","Documentation"],"carlos.ramirez":["SFTP","RequirementWorkflow","Documentation"]}',
+    )
+    monkeypatch.setenv("ADMINS_CSV", "sergio.cuevas.d")
 
     modules = perfil.get_user_modules("sergio.cuevas.d")
     assert "SFTP" in modules
@@ -79,7 +105,15 @@ def test_has_module_access_rejects_unknown_module(monkeypatch):
         perfil.has_module_access("sergio.cuevas.d", "DESCONOCIDO")
 
 
-def test_is_admin():
+def test_is_admin(monkeypatch):
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+    monkeypatch.setenv(
+        "USER_PROFILES_JSON",
+        '{"sergio.cuevas.d":["SFTP","COBOL","DTSX","RequirementWorkflow","Documentation"],"carlos.ramirez":["SFTP","RequirementWorkflow","Documentation"]}',
+    )
+    monkeypatch.setenv("ADMINS_CSV", "sergio.cuevas.d")
+
     assert perfil.is_admin("sergio.cuevas.d") is True
     assert perfil.is_admin("carlos.ramirez") is False
 
@@ -96,6 +130,11 @@ def test_show_profile_admin_denies_non_admin(monkeypatch):
 def test_show_profile_admin_admin_no_changes(monkeypatch):
     fake_st = _FakeStreamlit(initial_state={"username": "sergio.cuevas.d"})
     monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+    monkeypatch.setenv(
+        "USER_PROFILES_JSON",
+        '{"sergio.cuevas.d":["SFTP","COBOL","DTSX","RequirementWorkflow","Documentation"],"carlos.ramirez":["SFTP","RequirementWorkflow","Documentation"]}',
+    )
+    monkeypatch.setenv("ADMINS_CSV", "sergio.cuevas.d")
 
     perfil.show_profile_admin()
 
@@ -108,6 +147,11 @@ def test_show_profile_admin_admin_with_changes(monkeypatch):
         checkbox_values={"profile_sergio.cuevas.d_COBOL": False},
     )
     monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+    monkeypatch.setenv(
+        "USER_PROFILES_JSON",
+        '{"sergio.cuevas.d":["SFTP","COBOL","DTSX","RequirementWorkflow","Documentation"],"carlos.ramirez":["SFTP","RequirementWorkflow","Documentation"]}',
+    )
+    monkeypatch.setenv("ADMINS_CSV", "sergio.cuevas.d")
 
     perfil.show_profile_admin()
 
@@ -141,5 +185,183 @@ def test_init_profiles_falls_back_when_env_is_invalid(monkeypatch):
 
     perfil._init_profiles()
 
-    assert "sergio.cuevas.d" in fake_st.session_state.user_profiles
-    assert perfil.is_admin("sergio.cuevas.d") is True
+    assert fake_st.session_state.user_profiles == {}
+    assert perfil.is_admin("sergio.cuevas.d") is False
+
+
+def test_load_profiles_and_admins_from_postgres(monkeypatch):
+    class _FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, *_args, **_kwargs):
+            return None
+
+        def fetchall(self):
+            return [
+                ("sergio.cuevas.d", "SFTP", True),
+                ("sergio.cuevas.d", "DTSX", True),
+                ("carlos.ramirez", "Documentation", False),
+            ]
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _FakeCursor()
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(_dsn):
+            return _FakeConn()
+
+    monkeypatch.setattr(perfil, "psycopg", _FakePsycopg, raising=True)
+    monkeypatch.setenv("AUTH_PROVIDER", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+
+    loaded = perfil._build_profile_service().load_profiles_and_admins_from_postgres()
+    assert loaded is not None
+    profiles, admins = loaded
+    assert profiles["sergio.cuevas.d"] == ["SFTP", "DTSX"]
+    assert profiles["carlos.ramirez"] == ["Documentation"]
+    assert "sergio.cuevas.d" in admins
+
+
+def test_profile_service_update_user_profile_postgres(monkeypatch):
+    class _FakeCursor:
+        def __init__(self):
+            self._last_select = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, query, params=None):
+            if "SELECT id FROM app_auth.app_user" in query:
+                self._last_select = True
+            self.query = query
+            self.params = params
+
+        def fetchone(self):
+            if self._last_select:
+                return (1,)
+            return None
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _FakeCursor()
+
+        def commit(self):
+            return None
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(_dsn):
+            return _FakeConn()
+
+    monkeypatch.setattr(perfil, "psycopg", _FakePsycopg, raising=True)
+    monkeypatch.setenv("AUTH_PROVIDER", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+
+    ok = perfil._build_profile_service().update_user_profile(
+        username="sergio.cuevas.d",
+        full_name="Sergio Cuevas",
+        is_admin_user=True,
+        is_active_user=True,
+        module_keys=["SFTP", "COBOL"],
+        actor="tester",
+    )
+    assert ok is True
+
+
+def test_admin_reset_password_postgres(monkeypatch):
+    class _FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, *_args, **_kwargs):
+            return None
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _FakeCursor()
+
+        def commit(self):
+            return None
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(_dsn):
+            return _FakeConn()
+
+    monkeypatch.setattr(perfil, "psycopg", _FakePsycopg, raising=True)
+    monkeypatch.setenv("AUTH_PROVIDER", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+
+    ok, _ = perfil._build_profile_service().admin_reset_password(
+        username="sergio.cuevas.d",
+        new_plain_password="Nueva#2026",
+        actor="tester",
+    )
+    assert ok is True
+
+
+def test_create_user_profile_env_success(monkeypatch):
+    fake_st = _FakeStreamlit(initial_state={})
+    monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+    monkeypatch.setenv("AUTH_PROVIDER", "env")
+
+    ok, _ = perfil.create_user_profile(
+        username="nuevo.usuario",
+        plain_password="Nueva#2026",
+        full_name="Nuevo Usuario",
+        is_admin_user=False,
+        is_active_user=True,
+        module_keys=["SFTP", "Documentation"],
+        actor="sergio.cuevas.d",
+    )
+
+    assert ok is True
+    assert "nuevo.usuario" in fake_st.session_state.user_profiles
+
+
+def test_create_user_profile_requires_username(monkeypatch):
+    fake_st = _FakeStreamlit(initial_state={})
+    monkeypatch.setattr(perfil, "st", fake_st, raising=True)
+
+    ok, message = perfil.create_user_profile(
+        username=" ",
+        plain_password="Nueva#2026",
+        full_name="Nuevo Usuario",
+        is_admin_user=False,
+        is_active_user=True,
+        module_keys=["SFTP"],
+        actor="sergio.cuevas.d",
+    )
+
+    assert ok is False
+    assert "username" in message.lower()

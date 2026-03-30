@@ -1,123 +1,83 @@
-# Core Domain: Componentes de Primer Nivel
+# Core Domain: Servicios de Negocio
 
 ## Alcance
-Este documento cubre exclusivamente los archivos de primer nivel en la carpeta core/domain, sin considerar subcarpetas como core/domain/ports.
 
-## Objetivo de la capa domain
-La carpeta core/domain contiene servicios de dominio y contratos ligeros que orquestan reglas de negocio sin depender de Streamlit. Esta capa encapsula decisiones de negocio (resultado estandar, invocacion de IA y publicacion de integraciones) y delega detalles tecnicos a capas externas.
+Este README cubre archivos de primer nivel en `core/domain`.
 
-## Diagrama de Interaccion (Nivel Domain)
+## Objetivo
+
+`core/domain` concentra reglas de negocio desacopladas de Streamlit y de SDKs concretos.
+
+## Flujo Dominio (Auth, Perfiles, LLM, Integraciones)
+
 ```mermaid
 flowchart LR
-A[UI o Modulo] --> B[core.domain.ai_service.call_llm]
-B --> C[LlmGateway puerto]
-C --> D[Infraestructura LLM]
-B --> E[core.domain.contracts.make_result]
-B --> F[core.logger.log_operation]
+    A[UI Streamlit] --> B[auth_service]
+    A --> C[profile_service]
+    A --> D[ai_service]
+    A --> E[integration_service]
 
-G[UI o Modulo] --> H[core.domain.integration_service]
-H --> I[core.confluence]
-H --> J[core.jira]
-I --> K[Confluence API]
-J --> L[Jira API]
+    B --> F[core.infrastructure.auth_db]
+    C --> G[core.infrastructure.profile_db]
+
+    D --> H[LlmGateway puerto]
+    H --> I[LLM Infra]
+    D --> J[contracts.make_result]
+
+    E --> K[core.confluence]
+    E --> L[core.jira]
 ```
 
-## Componentes de core/domain (sin subcarpetas)
+## Componentes
 
-### 1) __init__.py
-- Rol: inicializador del paquete de dominio.
-- Estado actual: documenta que son servicios desacoplados de Streamlit.
-- Utilidad: habilita imports de namespace y comunica intencion arquitectonica de la carpeta.
+### `contracts.py`
 
-### 2) contracts.py
-- Rol: contrato comun para respuestas de servicios de dominio.
-- Funcion principal:
-  - `make_result(success, message, data=None, error_code=None)`
-- Responsabilidad:
-  - unificar la estructura de salida de operaciones de dominio.
-- Estructura estandar:
-  - `success`: resultado booleano.
-  - `message`: mensaje para consumo funcional/operativo.
-  - `data`: payload opcional.
-  - `error_code`: codigo opcional para control de errores.
-- Valor tecnico:
-  - reduce ambiguedad entre servicios.
-  - simplifica manejo de errores aguas arriba.
+- Define el contrato estandar de respuesta (`make_result`).
+- Homologa `success`, `message`, `data`, `error_code`.
 
-### 3) ai_service.py
-- Rol: servicio de dominio para ejecucion de llamadas LLM.
-- Funcion principal:
-  - `call_llm(system_role, user_content, model, temp, llm_gateway=None)`
-- Responsabilidad:
-  - validar presencia de gateway.
-  - delegar generacion al puerto `LlmGateway`.
-  - normalizar respuesta de error mediante `make_result`.
-  - registrar trazabilidad con `log_operation`.
-- Comportamiento clave:
-  - si no existe `llm_gateway`, retorna fallo controlado (`missing_gateway`).
-  - si el gateway responde error, propaga ese resultado.
-  - si ocurre excepcion no controlada, retorna `unexpected_error`.
-- Valor tecnico:
-  - separa reglas de negocio de la implementacion concreta del proveedor LLM.
-  - permite testear dominio con dobles/mocks de gateway.
+### `ai_service.py`
 
-### 4) integration_service.py
-- Rol: fachada de dominio para integraciones externas.
-- Funciones principales:
-  - `publish_confluence_page(...)`
-  - `resolve_confluence_metadata(page_url, user, api_token)`
-  - `publish_jira_issue(...)`
-- Responsabilidad:
-  - exponer API de dominio simple para publicar artefactos en Confluence/Jira.
-  - delegar en funciones de infraestructura ya existentes (`core.confluence`, `core.jira`).
-- Valor tecnico:
-  - centraliza llamadas de integracion para uso por modulos de negocio.
-  - evita que los modulos dependan directamente de implementaciones HTTP concretas.
+- Orquesta llamadas LLM contra el puerto `LlmGateway`.
+- No depende de proveedores concretos (OpenAI/Vertex).
+- Registra telemetria de operacion con `core.logger`.
 
-## Dependencias internas observadas
+### `integration_service.py`
 
-1. ai_service.py depende de:
-- contracts.py (resultado estandar)
-- core.domain.ports.llm_gateway (puerto)
-- core.logger (observabilidad)
+- Fachada de dominio para publicar contenido en Confluence/Jira.
+- Centraliza llamadas a integraciones HTTP externas.
 
-2. integration_service.py depende de:
-- core.confluence (publicacion y metadata)
-- core.jira (creacion de issues)
+### `auth_service.py`
 
-3. contracts.py:
-- no depende de infraestructura, solo de typing
+- Punto de negocio para autenticacion por `AUTH_PROVIDER`.
+- Enruta a `env`, `postgres` o `sqlserver` mediante infraestructura.
 
-## Patrón arquitectonico aplicado
+### `profile_service.py`
 
-1. Ports and Adapters (Hexagonal):
-- `ai_service.py` opera contra el puerto `LlmGateway`, no contra SDKs concretos.
+- Servicio de autorizacion y administracion de perfiles.
+- Carga perfiles/admins desde DB o variables de entorno.
+- Gestiona crear usuario, actualizar perfil y reset de password.
 
-2. Service Facade en dominio:
-- `integration_service.py` simplifica interfaz para capas superiores.
+## Principios Aplicados
 
-3. Resultado canonico:
-- `make_result` estandariza contratos de salida para flujos multiagente.
+- Ports and Adapters para IA.
+- Service Layer para auth/perfiles.
+- Contrato de respuesta uniforme para manejo de errores.
 
-## Fortalezas actuales
-- Acoplamiento bajo entre dominio e infraestructura LLM.
-- Manejo de errores consistente y trazable.
-- API de dominio simple para modulos de negocio.
+## Variables de Entorno Clave
 
-## Riesgos y recomendaciones
-1. Cohesion de integration_service:
-- Actualmente actua como wrapper delgado.
-- Recomendacion: incorporar validaciones de negocio de dominio cuando surjan reglas (por ejemplo, politicas de publicacion o enrichers de metadata).
+- `AUTH_PROVIDER`
+- `USER_PROFILES_JSON`
+- `ADMINS_CSV`
+- `DATABASE_URL`
+- `SQLSERVER_*`
+- `LLM_PROVIDER` y credenciales asociadas.
 
-2. Tipo de retorno:
-- Se usan diccionarios flexibles para resultados.
-- Recomendacion: evolucionar a TypedDict o dataclass para mayor seguridad tipada.
+## Notas de Implementacion
 
-3. Cobertura de pruebas:
-- Recomendacion: agregar pruebas unitarias para:
-  - `call_llm` con gateway nulo,
-  - `call_llm` con excepcion en gateway,
-  - wrappers de `integration_service` con mocks de confluence/jira.
+- No existen perfiles hardcodeados en dominio: en modo `env`, la fuente es `.env`.
+- `AUTH_PROVIDER` gobierna auth y perfiles persistentes.
+- La UI consume estos servicios y evita logica de infraestructura directa.
 
 ## Resumen
-core/domain define la capa de negocio transversal: estandariza contratos de salida, abstrae la ejecucion LLM mediante puertos y ofrece una fachada limpia para integraciones empresariales. Esta estructura facilita testabilidad, reduce acoplamiento y mantiene los modulos funcionales enfocados en orquestacion de flujo, no en detalles tecnicos de infraestructura.
+
+La capa `core/domain` encapsula reglas funcionales y deja que infraestructura resuelva conectividad. Esto mejora testabilidad, trazabilidad y evolucion del sistema de modernizacion IBM i.

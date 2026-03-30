@@ -60,13 +60,97 @@ Crea un archivo `.env` en la raíz del proyecto (puedes usar `.env.example` como
 | --- | --- | --- | --- |
 | `OPENAI_API_KEY` | Sí | API key para llamadas al modelo LLM | `sk-...` |
 | `SECRET_KEY` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `your_secret_key_here` |
-| `DATABASE_URL` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `sqlite:///db.sqlite3` |
+| `AUTH_PROVIDER` | No | Proveedor de login (`env` o `postgres`) | `postgres` |
+| `DATABASE_URL` | No | Cadena de conexión para login en PostgreSQL cuando `AUTH_PROVIDER=postgres` | `postgresql://agente_user:agente_password@localhost:5432/agente_db` |
 
 Ejemplo mínimo:
 
 ```ini
 OPENAI_API_KEY=sk-...
 ```
+
+## Login Con PostgreSQL 18.3
+
+Para habilitar autenticación contra base de datos en el login:
+
+1. Configura en `.env`:
+
+```ini
+AUTH_PROVIDER=postgres
+DATABASE_URL=postgresql://agente_user:agente_password@localhost:5432/agente_db
+```
+
+1. Ejecuta el script de bootstrap en PostgreSQL:
+
+```sql
+\i db/postgresql_18_3_auth.sql
+```
+
+1. Valida manualmente la función usada por la app:
+
+```sql
+SELECT * FROM app_auth.sp_validate_login('admin', 'Admin#2026', NULL, 'manual-test');
+```
+
+La aplicación invoca `app_auth.sp_validate_login` desde `core/utils.py` cuando `AUTH_PROVIDER=postgres`.
+
+## Camino Alternativo: Login Con SQL Server 2022
+
+Si PostgreSQL no es factible en tu entorno, puedes usar SQL Server 2022 con el mismo patrón de autenticación (tabla de usuarios, auditoría de intentos y stored procedure de login).
+
+1. Configura en `.env`:
+
+```ini
+AUTH_PROVIDER=sqlserver
+SQLSERVER_DRIVER=ODBC Driver 18 for SQL Server
+SQLSERVER_HOST=localhost
+SQLSERVER_PORT=1433
+SQLSERVER_DATABASE=agente_db
+SQLSERVER_USER=sa
+SQLSERVER_PASSWORD=YourStrong!Passw0rd
+SQLSERVER_TRUST_SERVER_CERTIFICATE=yes
+```
+
+1. Ejecuta el script SQL Server:
+
+```sql
+:r db/sqlserver_2022_auth.sql
+```
+
+1. Valida manualmente el login:
+
+```sql
+EXEC app_auth.sp_validate_login @username=N'admin', @password=N'Admin#2026', @client_ip=NULL, @user_agent=N'manual-test';
+```
+
+La app invoca `app_auth.sp_validate_login` cuando `AUTH_PROVIDER=sqlserver`.
+
+## Perfiles En PostgreSQL (Autorización por Módulo)
+
+Para que los permisos de módulos no dependan de `USER_PROFILES_JSON` y se gestionen desde base de datos:
+
+1. Configura en `.env`:
+
+```ini
+AUTH_PROVIDER=postgres
+DATABASE_URL=postgresql://agente_user:agente_password@localhost:5432/agente_db
+```
+
+1. Ejecuta scripts en orden:
+
+```sql
+\i db/postgresql_18_3_auth.sql
+\i db/postgresql_18_3_profiles.sql
+```
+
+1. Verifica permisos del usuario:
+
+```sql
+SELECT * FROM app_auth.fn_get_user_modules('admin');
+SELECT app_auth.fn_is_admin('admin');
+```
+
+La capa `core/perfil.py` leerá y persistirá los cambios del panel de perfiles directamente en PostgreSQL cuando `AUTH_PROVIDER=postgres`.
 
 ## Contenedores y Kubernetes
 
