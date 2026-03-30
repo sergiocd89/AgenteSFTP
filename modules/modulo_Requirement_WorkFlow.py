@@ -5,7 +5,6 @@ import time
 
 import streamlit as st
 import streamlit.components.v1 as components
-from core.domain.integration_service import publish_jira_issue, resolve_confluence_metadata
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
@@ -426,11 +425,10 @@ def show_requirement_workflow():
                                 request_id,
                             )
                     else:
-                        result_meta = resolve_confluence_metadata(
-                            confluence_link.strip(),
-                            confluence_user.strip(),
-                            confluence_password.strip(),
-                        )
+                        result_meta = {
+                            "success": False,
+                            "message": "Confluence metadata requiere backend habilitado y sesión backend activa.",
+                        }
                     if result_meta.get("success"):
                         metadata = result_meta.get("data") or {}
                         st.session_state.reqwf_confluence_link = confluence_link.strip()
@@ -493,11 +491,10 @@ def show_requirement_workflow():
                                     request_id,
                                 )
                         else:
-                            result_meta = resolve_confluence_metadata(
-                                confluence_link.strip(),
-                                confluence_user.strip(),
-                                confluence_password.strip(),
-                            )
+                            result_meta = {
+                                "success": False,
+                                "message": "Confluence metadata requiere backend habilitado y sesión backend activa.",
+                            }
                         if result_meta.get("success"):
                             metadata = result_meta.get("data") or {}
                             st.session_state.reqwf_confluence_space_key = metadata.get("space_key", "")
@@ -837,15 +834,10 @@ def show_requirement_workflow():
                                 request_id,
                             )
                     else:
-                        result = publish_jira_issue(
-                            jira_base_url,
-                            jira_project_key,
-                            jira_issue_type,
-                            summary,
-                            jira_description,
-                            jira_user,
-                            jira_password,
-                        )
+                        result = {
+                            "success": False,
+                            "message": "Publicación Jira requiere backend habilitado y sesión backend activa.",
+                        }
 
                     if result.get("success"):
                         ok_count += 1

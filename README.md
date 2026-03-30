@@ -318,9 +318,9 @@ Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI con fallb
 | SFTP workflow | Migrado | `/api/v1/workflows/sftp/{step}` | Sí |
 | COBOL to Python workflow | Migrado | `/api/v1/workflows/cobol-python/{step}` | Sí |
 | COBOL to DTSX workflow | Migrado | `/api/v1/workflows/cobol-dtsx/{step}` | Sí |
-| Integración Jira | Migrado | `/api/v1/integrations/jira/issue` | Sí |
-| Integración Confluence publish | Migrado | `/api/v1/integrations/confluence/publish` | Sí |
-| Integración Confluence metadata | Migrado | `/api/v1/integrations/confluence/metadata` | Sí |
+| Integración Jira | Migrado | `/api/v1/integrations/jira/issue` | No (backend-only) |
+| Integración Confluence publish | Migrado | `/api/v1/integrations/confluence/publish` | No (backend-only) |
+| Integración Confluence metadata | Migrado | `/api/v1/integrations/confluence/metadata` | No (backend-only) |
 
 Notas operativas:
 

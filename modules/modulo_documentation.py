@@ -7,7 +7,6 @@ from pathlib import Path
 
 import streamlit as st
 
-from core.domain.integration_service import publish_confluence_page
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
@@ -711,14 +710,10 @@ def show_documentation_module() -> None:
                                     request_id,
                                 )
                         else:
-                            result = publish_confluence_page(
-                                confluence_title.strip() or f"Documentación - {safe_name}",
-                                st.session_state.doc_analysis_output,
-                                parent_id or None,
-                                confluence_space_key.strip(),
-                                confluence_user.strip(),
-                                confluence_api_token.strip(),
-                            )
+                            result = {
+                                "success": False,
+                                "message": "Publicación en Confluence requiere backend habilitado y sesión backend activa.",
+                            }
                     if result.get("success"):
                         log_operation(
                             LOGGER,
