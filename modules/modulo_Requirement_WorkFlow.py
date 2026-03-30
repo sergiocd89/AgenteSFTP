@@ -9,7 +9,11 @@ from core.domain.integration_service import publish_jira_issue, resolve_confluen
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
-from core.observability import format_message_with_request_id, generate_request_id
+from core.observability import (
+    format_message_with_request_id,
+    format_workflow_log_details,
+    generate_request_id,
+)
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
 
@@ -91,7 +95,7 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
             operation="workflow_step_backend",
             success=bool(ok),
             error_code=str(error_code) if error_code else None,
-            details=f"request_id={request_id} workflow=requirement step={step} duration_ms={duration_ms}",
+            details=format_workflow_log_details(request_id, "requirement", step, duration_ms),
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")

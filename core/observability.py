@@ -10,3 +10,12 @@ def format_message_with_request_id(message: str, request_id: str | None) -> str:
     if not request_id:
         return text
     return f"{text} [request_id={request_id}]"
+
+
+def format_workflow_log_details(request_id: str, workflow: str, step: str, duration_ms: int) -> str:
+    return (
+        f"request_id={request_id} "
+        f"workflow={workflow} "
+        f"step={step} "
+        f"duration_ms={int(duration_ms)}"
+    )
