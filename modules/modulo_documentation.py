@@ -441,6 +441,33 @@ def _extract_from_zip_bytes(zip_bytes: bytes, file_name: str, max_chars: int) ->
     )
     return "\n\n".join(snippets), summary
 
+
+def _run_documentation_analysis(user_content: str) -> str:
+    """Ejecuta análisis de documentación vía backend (workflow) con fallback local."""
+    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        ok, payload = run_backend_operation_with_retry(
+            lambda token: backend_api_client.execute_workflow_step(
+                token=token,
+                workflow="documentation",
+                step="analyze",
+                source_input=user_content,
+                context="",
+                model=st.session_state.model_name,
+                temp=st.session_state.temp,
+            )
+        )
+        if ok and isinstance(payload, dict):
+            return str(payload.get("content") or "No se pudo generar la documentación para este archivo/paquete.")
+
+    sys_role = load_agent_prompt(AGENT_PROMPT_FILE)
+    result = run_llm_text(
+        sys_role,
+        user_content,
+        st.session_state.model_name,
+        st.session_state.temp,
+    )
+    return result or "No se pudo generar la documentación para este archivo/paquete."
+
 def show_documentation_module() -> None:
     st.title("📝 Módulo Documentación de Archivos o Paquetes")
     st.caption("Genera documentación técnica automáticamente a partir de archivos o paquetes subidos.")
@@ -535,7 +562,6 @@ def show_documentation_module() -> None:
         step_header("Paso 3: Respuesta del Análisis")
         if not st.session_state.doc_analysis_output:
             with st.spinner("Generando documentación técnica..."):
-                sys_role = load_agent_prompt(AGENT_PROMPT_FILE)
                 user_content = (
                     f"Tecnologías seleccionadas: {', '.join(st.session_state.doc_technologies)}\n"
                     f"Entrada: {st.session_state.doc_input_name}\n"
@@ -548,12 +574,7 @@ def show_documentation_module() -> None:
                     "entendimiento funcional, arquitectura, dependencias, recomendaciones "
                     "de modernización y próximos pasos."
                 )
-                st.session_state.doc_analysis_output = run_llm_text(
-                    sys_role,
-                    user_content,
-                    st.session_state.model_name,
-                    st.session_state.temp,
-                ) or "No se pudo generar la documentación para este archivo/paquete."
+                st.session_state.doc_analysis_output = _run_documentation_analysis(user_content)
 
         st.markdown(st.session_state.doc_analysis_output)
 

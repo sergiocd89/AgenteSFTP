@@ -158,3 +158,35 @@ def test_extract_from_zip_bytes_rejects_large_zip_bytes(monkeypatch):
     monkeypatch.setattr(module, "MAX_UPLOAD_BYTES", 8)
     with pytest.raises(ValueError, match="limite"):
         module._extract_from_zip_bytes(b"123456789", "big.zip", 100)
+
+
+def test_run_documentation_analysis_uses_backend_when_enabled(monkeypatch):
+    module = _import_doc_module()
+    module.st.session_state["backend_access_token"] = "token"
+    module.st.session_state["model_name"] = "gpt-4o"
+    module.st.session_state["temp"] = 0.0
+
+    monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: True)
+
+    def _fake_retry(operation):
+        return operation("token")
+
+    monkeypatch.setattr(module, "run_backend_operation_with_retry", _fake_retry)
+    monkeypatch.setattr(
+        module.backend_api_client,
+        "execute_workflow_step",
+        lambda **_kwargs: (True, {"content": "backend-doc"}),
+    )
+
+    output = module._run_documentation_analysis("entrada")
+    assert output == "backend-doc"
+
+
+def test_run_documentation_analysis_falls_back_to_local(monkeypatch):
+    module = _import_doc_module()
+    monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: False)
+    monkeypatch.setattr(module, "load_agent_prompt", lambda _name: "sys")
+    monkeypatch.setattr(module, "run_llm_text", lambda *_args, **_kwargs: "local-doc")
+
+    output = module._run_documentation_analysis("entrada")
+    assert output == "local-doc"
