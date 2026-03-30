@@ -13,8 +13,7 @@ from core.observability import (
     format_workflow_log_details,
     generate_request_id,
 )
-from core.ui.ai_presenter import run_llm_text
-from core.utils import load_agent_prompt, step_header
+from core.utils import step_header
 
 
 LOGGER = get_logger(__name__)
@@ -60,7 +59,7 @@ def _build_documents_context(uploaded_files) -> tuple[str, list[str]]:
 
 
 def _run_agent(agent_filename: str, user_content: str) -> str:
-    """Ejecuta un agente por archivo de prompt y maneja fallback de errores."""
+    """Ejecuta un agente de requirement solo por backend."""
     requirement_step_map = {
         "Agent_Requirement_WorkFlow_01_Creator_Use_Case.md": "create",
         "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md": "refine",
@@ -71,7 +70,10 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
     }
 
     step = requirement_step_map.get(agent_filename)
-    if step and backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+    if not step:
+        return "Step de requirement no soportado para ejecución backend."
+
+    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
         request_id = generate_request_id()
         started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
@@ -99,15 +101,11 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+        if isinstance(payload, dict):
+            return str(payload.get("message") or "No se pudo ejecutar este paso en backend.")
+        return "No se pudo ejecutar este paso en backend."
 
-    sys_role = load_agent_prompt(agent_filename)
-    result = run_llm_text(
-        sys_role,
-        user_content,
-        st.session_state.model_name,
-        st.session_state.temp,
-    )
-    return result or "No se pudo obtener respuesta del modelo en este paso."
+    return "Requirement workflow requiere backend habilitado y sesión backend activa."
 
 
 def _split_user_stories(refined_text: str) -> list[str]:

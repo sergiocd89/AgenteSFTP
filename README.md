@@ -305,7 +305,7 @@ Al iniciar, la UI permite elegir uno de tres flujos de migración y ejecutar el 
 
 ## Estado de Coexistencia Front/Backend
 
-Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI con fallback local):
+Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI):
 
 | Área | Estado | Ruta backend usada | Fallback local |
 | --- | --- | --- | --- |
@@ -313,11 +313,11 @@ Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI con fallb
 | Cambio de contraseña | Migrado | `/api/v1/auth/change-password` | Sí |
 | Perfil y autorización por módulo | Migrado | `/api/v1/profiles/*` | Sí |
 | Generación LLM genérica | Migrado | `/api/v1/llm/generate` | Sí |
-| Requirement Workflow (pasos 1-7) | Migrado | `/api/v1/workflows/requirement/{step}` | Sí |
-| Documentation (análisis) | Migrado | `/api/v1/workflows/documentation/analyze` | Sí |
-| SFTP workflow | Migrado | `/api/v1/workflows/sftp/{step}` | Sí |
-| COBOL to Python workflow | Migrado | `/api/v1/workflows/cobol-python/{step}` | Sí |
-| COBOL to DTSX workflow | Migrado | `/api/v1/workflows/cobol-dtsx/{step}` | Sí |
+| Requirement Workflow (pasos 1-7) | Migrado | `/api/v1/workflows/requirement/{step}` | No (backend-only) |
+| Documentation (análisis) | Migrado | `/api/v1/workflows/documentation/analyze` | No (backend-only) |
+| SFTP workflow | Migrado | `/api/v1/workflows/sftp/{step}` | No (backend-only) |
+| COBOL to Python workflow | Migrado | `/api/v1/workflows/cobol-python/{step}` | No (backend-only) |
+| COBOL to DTSX workflow | Migrado | `/api/v1/workflows/cobol-dtsx/{step}` | No (backend-only) |
 | Integración Jira | Migrado | `/api/v1/integrations/jira/issue` | No (backend-only) |
 | Integración Confluence publish | Migrado | `/api/v1/integrations/confluence/publish` | No (backend-only) |
 | Integración Confluence metadata | Migrado | `/api/v1/integrations/confluence/metadata` | No (backend-only) |
@@ -325,7 +325,7 @@ Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI con fallb
 Notas operativas:
 
 - El modo coexistencia se controla con `BACKEND_API_ENABLED=true` y `BACKEND_API_BASE_URL`.
-- Si backend está deshabilitado o no hay token válido, el front conserva ejecución local.
+- Si backend está deshabilitado o no hay token válido, los workflows/integraciones backend-only devuelven mensaje de backend requerido.
 - La estrategia permite rollout gradual sin romper operación actual.
 
 ## Observabilidad y Trazabilidad

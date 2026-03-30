@@ -202,14 +202,12 @@ def test_run_documentation_analysis_uses_backend_when_enabled(monkeypatch):
     assert "step=analyze" in str(log_calls[-1]["details"])
 
 
-def test_run_documentation_analysis_falls_back_to_local(monkeypatch):
+def test_run_documentation_analysis_requires_backend_when_disabled(monkeypatch):
     module = _import_doc_module()
     monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: False)
-    monkeypatch.setattr(module, "load_agent_prompt", lambda _name: "sys")
-    monkeypatch.setattr(module, "run_llm_text", lambda *_args, **_kwargs: "local-doc")
 
     output = module._run_documentation_analysis("entrada")
-    assert output == "local-doc"
+    assert "requiere backend habilitado" in output
 
 
 def test_with_request_id_formats_message():

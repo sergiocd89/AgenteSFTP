@@ -101,29 +101,27 @@ def _assert_backend_path(module, workflow: str, step: str, monkeypatch):
     assert f"step={step}" in str(log_calls[-1]["details"])
 
 
-def _assert_fallback_path(module, step: str, monkeypatch):
+def _assert_backend_required_path(module, step: str, monkeypatch):
     monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: False)
-    monkeypatch.setattr(module, "load_agent_prompt", lambda _prompt: "sys")
-    monkeypatch.setattr(module, "run_llm_text", lambda *_args, **_kwargs: "local-output")
 
     out = module._run_workflow_step(step, "any_prompt.md", "input-data", "ctx")
 
-    assert out == "local-output"
+    assert "requiere backend habilitado" in out
 
 
-def test_sftp_routing_backend_and_fallback(monkeypatch):
+def test_sftp_routing_backend_and_requires_backend(monkeypatch):
     module = _import_module("modules.modulo_sftp")
     _assert_backend_path(module, "sftp", "analyze", monkeypatch)
-    _assert_fallback_path(module, "audit", monkeypatch)
+    _assert_backend_required_path(module, "audit", monkeypatch)
 
 
-def test_cobol_routing_backend_and_fallback(monkeypatch):
+def test_cobol_routing_backend_and_requires_backend(monkeypatch):
     module = _import_module("modules.modulo_cobol")
     _assert_backend_path(module, "cobol_python", "analyze", monkeypatch)
-    _assert_fallback_path(module, "develop", monkeypatch)
+    _assert_backend_required_path(module, "develop", monkeypatch)
 
 
-def test_dtsx_routing_backend_and_fallback(monkeypatch):
+def test_dtsx_routing_backend_and_requires_backend(monkeypatch):
     module = _import_module("modules.modulo_dtsx")
     _assert_backend_path(module, "cobol_dtsx", "architect", monkeypatch)
-    _assert_fallback_path(module, "audit", monkeypatch)
+    _assert_backend_required_path(module, "audit", monkeypatch)

@@ -15,8 +15,7 @@ from core.observability import (
     format_workflow_log_details,
     generate_request_id,
 )
-from core.ui.ai_presenter import run_llm_text
-from core.utils import load_agent_prompt, step_header
+from core.utils import step_header
 
 AGENT_PROMPT_FILE = "00_documentator.md"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -448,44 +447,40 @@ def _extract_from_zip_bytes(zip_bytes: bytes, file_name: str, max_chars: int) ->
 
 
 def _run_documentation_analysis(user_content: str) -> str:
-    """Ejecuta análisis de documentación vía backend (workflow) con fallback local."""
-    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
-        request_id = generate_request_id()
-        started_at = time.perf_counter()
-        ok, payload = run_backend_operation_with_retry(
-            lambda token: backend_api_client.execute_workflow_step(
-                token=token,
-                workflow="documentation",
-                step="analyze",
-                source_input=user_content,
-                context="",
-                model=st.session_state.model_name,
-                temp=st.session_state.temp,
-                request_id=request_id,
-            )
-        )
-        duration_ms = int((time.perf_counter() - started_at) * 1000)
-        error_code = None
-        if isinstance(payload, dict):
-            error_code = payload.get("error_code")
-        log_operation(
-            LOGGER,
-            operation="workflow_step_backend",
-            success=bool(ok),
-            error_code=str(error_code) if error_code else None,
-            details=format_workflow_log_details(request_id, "documentation", "analyze", duration_ms),
-        )
-        if ok and isinstance(payload, dict):
-            return str(payload.get("content") or "No se pudo generar la documentación para este archivo/paquete.")
+    """Ejecuta análisis de documentación solo por backend (workflow)."""
+    if not (backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token")):
+        return "Documentation workflow requiere backend habilitado y sesión backend activa."
 
-    sys_role = load_agent_prompt(AGENT_PROMPT_FILE)
-    result = run_llm_text(
-        sys_role,
-        user_content,
-        st.session_state.model_name,
-        st.session_state.temp,
+    request_id = generate_request_id()
+    started_at = time.perf_counter()
+    ok, payload = run_backend_operation_with_retry(
+        lambda token: backend_api_client.execute_workflow_step(
+            token=token,
+            workflow="documentation",
+            step="analyze",
+            source_input=user_content,
+            context="",
+            model=st.session_state.model_name,
+            temp=st.session_state.temp,
+            request_id=request_id,
+        )
     )
-    return result or "No se pudo generar la documentación para este archivo/paquete."
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    error_code = None
+    if isinstance(payload, dict):
+        error_code = payload.get("error_code")
+    log_operation(
+        LOGGER,
+        operation="workflow_step_backend",
+        success=bool(ok),
+        error_code=str(error_code) if error_code else None,
+        details=format_workflow_log_details(request_id, "documentation", "analyze", duration_ms),
+    )
+    if ok and isinstance(payload, dict):
+        return str(payload.get("content") or "No se pudo generar la documentación para este archivo/paquete.")
+    if isinstance(payload, dict):
+        return str(payload.get("message") or "No se pudo ejecutar este paso en backend.")
+    return "No se pudo ejecutar este paso en backend."
 
 
 def show_documentation_module() -> None:

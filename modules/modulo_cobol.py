@@ -4,52 +4,47 @@ from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
 from core.observability import format_workflow_log_details, generate_request_id
-from core.ui.ai_presenter import run_llm_text
-from core.utils import load_agent_prompt, step_header
+from core.utils import step_header
 
 
 LOGGER = get_logger(__name__)
 
 
 def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: str = "") -> str:
-    """Ejecuta step COBOL->Python por backend y mantiene fallback local."""
-    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
-        request_id = generate_request_id()
-        started_at = time.perf_counter()
-        ok, payload = run_backend_operation_with_retry(
-            lambda token: backend_api_client.execute_workflow_step(
-                token=token,
-                workflow="cobol_python",
-                step=step,
-                source_input=source_input,
-                context=context,
-                model=st.session_state.model_name,
-                temp=st.session_state.temp,
-                request_id=request_id,
-            )
-        )
-        duration_ms = int((time.perf_counter() - started_at) * 1000)
-        error_code = None
-        if isinstance(payload, dict):
-            error_code = payload.get("error_code")
-        log_operation(
-            LOGGER,
-            operation="workflow_step_backend",
-            success=bool(ok),
-            error_code=str(error_code) if error_code else None,
-            details=format_workflow_log_details(request_id, "cobol_python", step, duration_ms),
-        )
-        if ok and isinstance(payload, dict):
-            return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+    """Ejecuta step COBOL->Python solo por backend."""
+    if not (backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token")):
+        return "Workflow COBOL to Python requiere backend habilitado y sesión backend activa."
 
-    sys_role = load_agent_prompt(prompt_file)
-    result = run_llm_text(
-        sys_role,
-        source_input,
-        st.session_state.model_name,
-        st.session_state.temp,
+    request_id = generate_request_id()
+    started_at = time.perf_counter()
+    ok, payload = run_backend_operation_with_retry(
+        lambda token: backend_api_client.execute_workflow_step(
+            token=token,
+            workflow="cobol_python",
+            step=step,
+            source_input=source_input,
+            context=context,
+            model=st.session_state.model_name,
+            temp=st.session_state.temp,
+            request_id=request_id,
+        )
     )
-    return result or "No se pudo obtener respuesta del modelo en este paso."
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    error_code = None
+    if isinstance(payload, dict):
+        error_code = payload.get("error_code")
+    log_operation(
+        LOGGER,
+        operation="workflow_step_backend",
+        success=bool(ok),
+        error_code=str(error_code) if error_code else None,
+        details=format_workflow_log_details(request_id, "cobol_python", step, duration_ms),
+    )
+    if ok and isinstance(payload, dict):
+        return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+    if isinstance(payload, dict):
+        return str(payload.get("message") or "No se pudo ejecutar este paso en backend.")
+    return "No se pudo ejecutar este paso en backend."
 
 def show_cobol_migration():
     st.title("🐍 Migrador Cobol a Python")

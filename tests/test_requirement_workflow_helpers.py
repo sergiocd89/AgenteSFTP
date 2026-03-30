@@ -163,16 +163,14 @@ def test_run_agent_uses_backend_workflow_when_enabled(monkeypatch):
     assert "step=create" in str(log_calls[-1]["details"])
 
 
-def test_run_agent_falls_back_to_local_when_backend_disabled(monkeypatch):
+def test_run_agent_requires_backend_when_disabled(monkeypatch):
     workflow = _import_workflow_module()
 
     monkeypatch.setattr(workflow.backend_api_client, "is_backend_enabled", lambda: False)
-    monkeypatch.setattr(workflow, "load_agent_prompt", lambda _name: "sys-role")
-    monkeypatch.setattr(workflow, "run_llm_text", lambda *_args, **_kwargs: "local-result")
 
     result = workflow._run_agent("Agent_Requirement_WorkFlow_01_Creator_Use_Case.md", "entrada")
 
-    assert result == "local-result"
+    assert "requiere backend habilitado" in result
 
 
 def test_with_request_id_formats_message():
