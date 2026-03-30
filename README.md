@@ -301,6 +301,31 @@ streamlit run main.py
 
 Al iniciar, la UI permite elegir uno de tres flujos de migración y ejecutar el pipeline completo hasta auditoría y entrega.
 
+## Estado de Coexistencia Front/Backend
+
+Matriz de estado actual de coexistencia (Streamlit consumiendo FastAPI con fallback local):
+
+| Área | Estado | Ruta backend usada | Fallback local |
+| --- | --- | --- | --- |
+| Login y refresh de sesión | Migrado | `/api/v1/auth/login`, `/api/v1/auth/refresh` | Sí |
+| Cambio de contraseña | Migrado | `/api/v1/auth/change-password` | Sí |
+| Perfil y autorización por módulo | Migrado | `/api/v1/profiles/*` | Sí |
+| Generación LLM genérica | Migrado | `/api/v1/llm/generate` | Sí |
+| Requirement Workflow (pasos 1-7) | Migrado | `/api/v1/workflows/requirement/{step}` | Sí |
+| Documentation (análisis) | Migrado | `/api/v1/workflows/documentation/analyze` | Sí |
+| SFTP workflow | Migrado | `/api/v1/workflows/sftp/{step}` | Sí |
+| COBOL to Python workflow | Migrado | `/api/v1/workflows/cobol-python/{step}` | Sí |
+| COBOL to DTSX workflow | Migrado | `/api/v1/workflows/cobol-dtsx/{step}` | Sí |
+| Integración Jira | Migrado | `/api/v1/integrations/jira/issue` | Sí |
+| Integración Confluence publish | Migrado | `/api/v1/integrations/confluence/publish` | Sí |
+| Integración Confluence metadata | Migrado | `/api/v1/integrations/confluence/metadata` | Sí |
+
+Notas operativas:
+
+- El modo coexistencia se controla con `BACKEND_API_ENABLED=true` y `BACKEND_API_BASE_URL`.
+- Si backend está deshabilitado o no hay token válido, el front conserva ejecución local.
+- La estrategia permite rollout gradual sin romper operación actual.
+
 ## Checklist de PR
 
 Para preparar el PR de separación y convivencia Streamlit + FastAPI, usa:

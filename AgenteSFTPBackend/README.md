@@ -71,8 +71,18 @@ Workflows soportados en este primer corte:
 - `requirement` (`create`, `refine`, `diagram`, `size`, `test_cases`, `format_issue`)
 - `documentation` (`analyze`)
 
+## Estado Actual
+
+Este backend ya cubre:
+
+- Autenticación JWT con refresh.
+- Perfilado y control de acceso por módulos.
+- Ejecución de workflows tipados para SFTP, COBOL->Python, COBOL->DTSX, Requirement y Documentation.
+- Integraciones backend-only para Jira y Confluence.
+- Pruebas de contrato para auth, profiles, llm, workflows e integrations.
+
 ## Próximos pasos
 
-- Endpoints dedicados para integraciones externas (`jira`, `confluence`) backend-only
-- Endpoints especializados por flujo con payloads tipados por etapa
-- Pruebas de contrato API por endpoint especializado
+- Definir telemetría/tracing por request para observabilidad de pipelines largos.
+- Endurecer límites de tamaño y timeouts por endpoint de workflow según entorno productivo.
+- Completar separación física front/back en repositorios independientes si se decide avanzar a fase 2.
