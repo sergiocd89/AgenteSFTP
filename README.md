@@ -60,8 +60,14 @@ Crea un archivo `.env` en la raíz del proyecto (puedes usar `.env.example` como
 | --- | --- | --- | --- |
 | `OPENAI_API_KEY` | Sí | API key para llamadas al modelo LLM | `sk-...` |
 | `SECRET_KEY` | No | Variable presente en ejemplo de entorno, no usada en el flujo actual | `your_secret_key_here` |
-| `AUTH_PROVIDER` | No | Proveedor de login (`env` o `postgres`) | `postgres` |
+| `AUTH_PROVIDER` | No | Proveedor de login (`env`, `postgres` o `sqlserver`) | `postgres` |
 | `DATABASE_URL` | No | Cadena de conexión para login en PostgreSQL cuando `AUTH_PROVIDER=postgres` | `postgresql://agente_user:agente_password@localhost:5432/agente_db` |
+| `BACKEND_API_ENABLED` | No | Habilita modo coexistencia para consumir API FastAPI desde Streamlit | `true` |
+| `BACKEND_API_BASE_URL` | No | URL base del backend FastAPI | `http://localhost:8000` |
+| `BACKEND_AUTO_LOGOUT_ON_AUTH_FAILURE` | No | Si falla refresh forzado: cierra sesión Streamlit (`true`) o solo invalida token backend (`false`) | `true` |
+| `JWT_SECRET_KEY` | No | Secreto JWT usado por backend FastAPI (recomendado >= 32 bytes) | `change-me-in-env-with-at-least-32-bytes` |
+| `JWT_ALGORITHM` | No | Algoritmo de firma JWT | `HS256` |
+| `JWT_EXP_MINUTES` | No | Minutos de vigencia del token JWT | `60` |
 
 Ejemplo mínimo:
 

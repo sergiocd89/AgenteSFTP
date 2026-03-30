@@ -27,7 +27,9 @@ Reutiliza el `.env` raíz del proyecto actual para:
 - `SQLSERVER_*` (si aplica)
 - `AUTH_USERS_JSON` o `AUTH_USER`/`AUTH_PASSWORD` (modo env)
 - `USER_PROFILES_JSON`, `ADMINS_CSV`
-- `JWT_SECRET_KEY` (recomendado)
+- `JWT_SECRET_KEY` (recomendado, >=32 bytes)
+- `JWT_ALGORITHM` (opcional, default `HS256`)
+- `JWT_EXP_MINUTES` (opcional, default `60`)
 
 ## Ejecutar local
 
@@ -54,6 +56,5 @@ python -m uvicorn AgenteSFTPBackend.app.main:app --reload --port 8000
 
 ## Próximos pasos
 
-- Endpoint de LLM (`/api/v1/llm/generate`)
 - Endpoints de workflows (`sftp`, `cobol`, `dtsx`, `requirement`, `documentation`)
 - Pruebas de contrato API
