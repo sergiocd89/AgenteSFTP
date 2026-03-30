@@ -245,3 +245,150 @@ def generate_llm(token: str, system_role: str, user_content: str, model: str, te
         "error_code": None,
         "content": None,
     }
+
+
+def create_jira_issue(
+    token: str,
+    base_url: str,
+    project_key: str,
+    issue_type: str,
+    summary: str,
+    description_text: str,
+    jira_user: str,
+    jira_password: str,
+) -> tuple[bool, dict[str, Any]]:
+    ok, status, body = _http_json(
+        "POST",
+        "/api/v1/integrations/jira/issue",
+        payload={
+            "base_url": base_url,
+            "project_key": project_key,
+            "issue_type": issue_type,
+            "summary": summary,
+            "description_text": description_text,
+            "jira_user": jira_user,
+            "jira_password": jira_password,
+        },
+        token=token,
+        timeout=30.0,
+    )
+    if ok:
+        return True, body
+
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        return False, {
+            "success": False,
+            "message": str(detail.get("message", "No fue posible crear issue en Jira.")),
+            "error_code": detail.get("error_code"),
+            "data": body.get("data"),
+        }
+    if isinstance(detail, str):
+        return False, {"success": False, "message": detail, "error_code": None, "data": None}
+    if status in {401, 403}:
+        return False, {
+            "success": False,
+            "message": "Sesión inválida o expirada. Vuelve a iniciar sesión.",
+            "error_code": None,
+            "data": None,
+        }
+
+    return False, {
+        "success": False,
+        "message": str(body.get("message", "No fue posible crear issue en Jira en backend.")),
+        "error_code": None,
+        "data": None,
+    }
+
+
+def publish_confluence_page(
+    token: str,
+    title: str,
+    markdown_content: str,
+    parent_id: str | None,
+    space_key: str,
+    user: str,
+    api_token: str,
+) -> tuple[bool, dict[str, Any]]:
+    ok, status, body = _http_json(
+        "POST",
+        "/api/v1/integrations/confluence/publish",
+        payload={
+            "title": title,
+            "markdown_content": markdown_content,
+            "parent_id": parent_id,
+            "space_key": space_key,
+            "user": user,
+            "api_token": api_token,
+        },
+        token=token,
+        timeout=30.0,
+    )
+    if ok:
+        return True, body
+
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        return False, {
+            "success": False,
+            "message": str(detail.get("message", "No fue posible publicar en Confluence.")),
+            "error_code": detail.get("error_code"),
+            "data": body.get("data"),
+        }
+    if isinstance(detail, str):
+        return False, {"success": False, "message": detail, "error_code": None, "data": None}
+    if status in {401, 403}:
+        return False, {
+            "success": False,
+            "message": "Sesión inválida o expirada. Vuelve a iniciar sesión.",
+            "error_code": None,
+            "data": None,
+        }
+
+    return False, {
+        "success": False,
+        "message": str(body.get("message", "No fue posible publicar en Confluence en backend.")),
+        "error_code": None,
+        "data": None,
+    }
+
+
+def get_confluence_metadata(token: str, page_url: str, user: str, api_token: str) -> tuple[bool, dict[str, Any]]:
+    ok, status, body = _http_json(
+        "POST",
+        "/api/v1/integrations/confluence/metadata",
+        payload={
+            "page_url": page_url,
+            "user": user,
+            "api_token": api_token,
+        },
+        token=token,
+        timeout=20.0,
+    )
+    if ok:
+        return True, body
+
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        return False, {
+            "success": False,
+            "message": str(detail.get("message", "No fue posible obtener metadata de Confluence.")),
+            "error_code": detail.get("error_code"),
+            "data": body.get("data"),
+        }
+    if isinstance(detail, str):
+        return False, {"success": False, "message": detail, "error_code": None, "data": None}
+    if status in {401, 403}:
+        return False, {
+            "success": False,
+            "message": "Sesión inválida o expirada. Vuelve a iniciar sesión.",
+            "error_code": None,
+            "data": None,
+        }
+
+    return False, {
+        "success": False,
+        "message": str(body.get("message", "No fue posible obtener metadata de Confluence en backend.")),
+        "error_code": None,
+        "data": None,
+    }

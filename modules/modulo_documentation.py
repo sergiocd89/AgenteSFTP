@@ -7,6 +7,8 @@ from pathlib import Path
 import streamlit as st
 
 from core.domain.integration_service import publish_confluence_page
+from core.infrastructure import backend_api_client
+from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
@@ -644,14 +646,30 @@ def show_documentation_module() -> None:
             else:
                 try:
                     with st.spinner("Subiendo documentacion a Confluence..."):
-                        result = publish_confluence_page(
-                            confluence_title.strip() or f"Documentación - {safe_name}",
-                            st.session_state.doc_analysis_output,
-                            parent_id or None,
-                            confluence_space_key.strip(),
-                            confluence_user.strip(),
-                            confluence_api_token.strip(),
-                        )
+                        if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+                            ok, payload = run_backend_operation_with_retry(
+                                lambda token: backend_api_client.publish_confluence_page(
+                                    token,
+                                    confluence_title.strip() or f"Documentación - {safe_name}",
+                                    st.session_state.doc_analysis_output,
+                                    parent_id or None,
+                                    confluence_space_key.strip(),
+                                    confluence_user.strip(),
+                                    confluence_api_token.strip(),
+                                )
+                            )
+                            result = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
+                            if ok:
+                                result["success"] = True
+                        else:
+                            result = publish_confluence_page(
+                                confluence_title.strip() or f"Documentación - {safe_name}",
+                                st.session_state.doc_analysis_output,
+                                parent_id or None,
+                                confluence_space_key.strip(),
+                                confluence_user.strip(),
+                                confluence_api_token.strip(),
+                            )
                     if result.get("success"):
                         log_operation(
                             LOGGER,
