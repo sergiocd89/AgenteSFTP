@@ -259,7 +259,7 @@ def execute_workflow_step(
     workflow_key = (workflow or "").strip().lower()
     step_key = (step or "").strip().lower()
 
-    ok, _status, body = _http_json(
+    ok, status, body = _http_json(
         "POST",
         f"/api/v1/workflows/{workflow_key}/{step_key}",
         payload={
@@ -273,6 +273,14 @@ def execute_workflow_step(
     )
     if ok:
         return True, body
+
+    if status in {401, 403}:
+        return False, {
+            "success": False,
+            "message": "Sesión inválida o expirada. Vuelve a iniciar sesión.",
+            "error_code": None,
+            "content": None,
+        }
 
     detail = body.get("detail")
     if isinstance(detail, dict):
