@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from core.domain.profile_service import ProfileService
 from core.infrastructure import auth_db
+from core.infrastructure import backend_api_client
 from core.ui.profile_presenter import (
     ensure_profile_state,
     refresh_profile_state,
@@ -125,6 +126,18 @@ def create_user_profile(
     if not ok_inputs:
         return False, msg_inputs
 
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if backend_api_client.is_backend_enabled() and token:
+        return backend_api_client.create_profile(
+            token=token,
+            username=safe_username,
+            plain_password=safe_password,
+            full_name=full_name,
+            is_admin=bool(is_admin_user),
+            is_active=bool(is_active_user),
+            modules=valid_module_keys,
+        )
+
     provider = _get_auth_provider()
     service = _build_profile_service()
     if provider in {"postgres", "postgresql", "db", "sqlserver", "mssql"}:
@@ -170,6 +183,23 @@ def _load_profiles_and_admins_from_env() -> tuple[dict[str, list[str]], set[str]
 
 def get_user_modules(username: str) -> list[str]:
     """Retorna la lista de claves de módulos habilitados para el usuario."""
+    current_username = str(st.session_state.get("username", "") or "")
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if (
+        backend_api_client.is_backend_enabled()
+        and token
+        and current_username
+        and current_username == (username or "")
+    ):
+        ok, profile = backend_api_client.get_me_profile(token)
+        if ok:
+            modules = list(profile.get("modules") or [])
+            st.session_state.backend_profile = {
+                "modules": modules,
+                "is_admin": bool(profile.get("is_admin", False)),
+            }
+            return modules
+
     _init_profiles()
     return list(st.session_state.user_profiles.get(username, []))
 
@@ -178,11 +208,41 @@ def has_module_access(username: str, module_key: str) -> bool:
     """Devuelve True si el usuario tiene acceso al módulo indicado."""
     if module_key not in MODULES:
         raise ValueError(f"module_key no soportado: {module_key}")
+
+    current_username = str(st.session_state.get("username", "") or "")
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if (
+        backend_api_client.is_backend_enabled()
+        and token
+        and current_username
+        and current_username == (username or "")
+    ):
+        ok, allowed = backend_api_client.has_module_access(token, module_key)
+        if ok:
+            return allowed
+
     return module_key in get_user_modules(username)
 
 
 def is_admin(username: str) -> bool:
     """Devuelve True si el usuario tiene rol administrador."""
+    current_username = str(st.session_state.get("username", "") or "")
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if (
+        backend_api_client.is_backend_enabled()
+        and token
+        and current_username
+        and current_username == (username or "")
+    ):
+        ok, profile = backend_api_client.get_me_profile(token)
+        if ok:
+            is_admin_value = bool(profile.get("is_admin", False))
+            st.session_state.backend_profile = {
+                "modules": list(profile.get("modules") or []),
+                "is_admin": is_admin_value,
+            }
+            return is_admin_value
+
     _init_profiles()
     return username in st.session_state.admin_users
 
@@ -209,6 +269,8 @@ def show_profile_admin() -> None:
     module_keys = list(MODULES.keys())
     provider = _get_auth_provider()
     service = _build_profile_service()
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    use_backend = backend_api_client.is_backend_enabled() and bool(token)
 
     with st.expander("➕ Crear nuevo usuario", expanded=False):
         with st.form("create_user_profile_form"):
@@ -260,6 +322,8 @@ def show_profile_admin() -> None:
             )
             if ok:
                 st.success(message)
+                if use_backend:
+                    _refresh_profiles_from_provider()
                 st.rerun()
             else:
                 st.error(message)
@@ -352,7 +416,28 @@ def show_profile_admin() -> None:
             )
 
             if modules_changed or meta_changed:
-                if provider in {"postgres", "postgresql", "db", "sqlserver", "mssql"}:
+                if use_backend:
+                    ok_upd, msg_upd = backend_api_client.update_profile(
+                        token=token,
+                        username=user,
+                        full_name=(new_full_name or "").strip(),
+                        is_admin=bool(new_is_admin),
+                        is_active=bool(new_is_active),
+                        modules=new_allowed,
+                    )
+                    if ok_upd:
+                        apply_local_user_changes(
+                            st.session_state,
+                            user,
+                            new_allowed,
+                            new_full_name,
+                            bool(new_is_admin),
+                            bool(new_is_active),
+                        )
+                        changed = True
+                    else:
+                        st.error(msg_upd)
+                elif provider in {"postgres", "postgresql", "db", "sqlserver", "mssql"}:
                     actor = st.session_state.get("username", "system")
                     if service.update_user_profile(
                         username=user,

@@ -1,5 +1,6 @@
 import streamlit as st
 from core.utils import check_credentials, change_user_password
+from core.infrastructure import backend_api_client
 
 
 def _normalize_login_inputs(username: str, password: str) -> tuple[str, str]:
@@ -18,6 +19,8 @@ def _init_auth_state() -> None:
         "logged_in": False,
         "username": "",
         "login_error": False,
+        "backend_access_token": "",
+        "backend_profile": {},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -67,7 +70,23 @@ def show_login() -> None:
                         st.session_state.login_error = True
                         st.error(f"⚠️ {exc}")
                     else:
-                        if check_credentials(normalized_username, normalized_password):
+                        authenticated = False
+                        if backend_api_client.is_backend_enabled():
+                            ok, _message, data = backend_api_client.login(normalized_username, normalized_password)
+                            if ok:
+                                st.session_state.backend_access_token = str(data.get("access_token", ""))
+                                st.session_state.backend_profile = {
+                                    "modules": list(data.get("modules") or []),
+                                    "is_admin": bool(data.get("is_admin", False)),
+                                }
+                                authenticated = True
+
+                        if not authenticated and check_credentials(normalized_username, normalized_password):
+                            st.session_state.backend_access_token = ""
+                            st.session_state.backend_profile = {}
+                            authenticated = True
+
+                        if authenticated:
                             st.session_state.logged_in = True
                             st.session_state.username = normalized_username
                             st.session_state.login_error = False
@@ -108,7 +127,13 @@ def render_change_password_section() -> None:
                 st.error("⚠️ La confirmación de contraseña no coincide.")
                 return
 
-            ok, message = change_user_password(username, current_password, new_password)
+            ok = False
+            message = "No fue posible actualizar la contraseña."
+            token = str(st.session_state.get("backend_access_token", "") or "")
+            if backend_api_client.is_backend_enabled() and token:
+                ok, message = backend_api_client.change_password(token, current_password, new_password)
+            else:
+                ok, message = change_user_password(username, current_password, new_password)
             if ok:
                 st.success(f"✅ {message}")
             else:

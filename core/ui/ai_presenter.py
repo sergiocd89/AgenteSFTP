@@ -1,6 +1,7 @@
 import streamlit as st
 
 from core.domain.ai_service import call_llm as domain_call_llm
+from core.infrastructure import backend_api_client
 from core.infrastructure.llm.factory import resolve_llm_gateway
 from core.logger import get_logger, log_operation
 
@@ -10,6 +11,18 @@ logger = get_logger(__name__)
 
 def run_llm_text(system_role: str, user_content: str, model: str, temp: float) -> str | None:
     """Adaptador de UI para ejecutar LLM y mostrar errores amigables en Streamlit."""
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if backend_api_client.is_backend_enabled() and token:
+        ok, payload = backend_api_client.generate_llm(token, system_role, user_content, model, temp)
+        if ok:
+            return payload.get("content")
+
+        error_code = payload.get("error_code")
+        message = payload.get("message", "Error en llamada LLM.")
+        log_operation(logger, "ui_run_llm_text", False, error_code, message)
+        st.error(f"❌ Error backend LLM: {message}")
+        return None
+
     gateway, provider = resolve_llm_gateway()
     if gateway is None:
         st.error(f"❌ Proveedor LLM no soportado: {provider}. Usa openai o vertex_gemini.")
