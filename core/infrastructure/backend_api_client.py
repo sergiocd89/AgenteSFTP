@@ -179,6 +179,26 @@ def update_profile(
     return False, str(body.get("message", "No fue posible actualizar perfil en backend."))
 
 
+def reset_profile_password(token: str, username: str, new_password: str) -> tuple[bool, str]:
+    ok, status, body = _http_json(
+        "POST",
+        f"/api/v1/profiles/{username}/reset-password",
+        payload={"new_password": new_password},
+        token=token,
+    )
+    if ok:
+        return True, str(body.get("message", "Contraseña actualizada correctamente."))
+
+    detail = body.get("detail")
+    if isinstance(detail, str):
+        return False, detail
+    if isinstance(detail, dict):
+        return False, str(detail.get("message", "No fue posible resetear contraseña."))
+    if status in {401, 403}:
+        return False, "No tienes permisos o la sesión expiró."
+    return False, str(body.get("message", "No fue posible resetear contraseña en backend."))
+
+
 def generate_llm(token: str, system_role: str, user_content: str, model: str, temp: float) -> tuple[bool, dict[str, Any]]:
     ok, _status, body = _http_json(
         "POST",

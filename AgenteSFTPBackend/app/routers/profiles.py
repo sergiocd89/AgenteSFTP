@@ -4,10 +4,11 @@ from ..dependencies import get_current_claims, get_current_username
 from ..schemas import (
     ProfileCreateRequest,
     ProfileOperationResponse,
+    ProfileResetPasswordRequest,
     ProfileResponse,
     ProfileUpsertRequest,
 )
-from ..services import can_access_module, create_profile, get_user_profile, update_profile
+from ..services import can_access_module, create_profile, get_user_profile, reset_profile_password, update_profile
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
 
@@ -84,6 +85,30 @@ def update(
         is_admin=payload.is_admin,
         is_active=payload.is_active,
         modules=payload.modules,
+        actor=actor,
+    )
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    return ProfileOperationResponse(success=True, message=message, username=username)
+
+
+@router.post("/{username}/reset-password", response_model=ProfileOperationResponse)
+def reset_password(
+    username: str,
+    payload: ProfileResetPasswordRequest,
+    claims: dict = Depends(get_current_claims),
+) -> ProfileOperationResponse:
+    actor = str(claims.get("sub", "")).strip()
+    if not bool(claims.get("is_admin", False)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden resetear contraseñas.",
+        )
+
+    ok, message = reset_profile_password(
+        username=username,
+        new_password=payload.new_password,
         actor=actor,
     )
     if not ok:

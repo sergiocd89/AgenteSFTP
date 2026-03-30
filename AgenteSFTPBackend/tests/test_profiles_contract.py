@@ -145,3 +145,32 @@ def test_update_profile_forbidden_for_non_admin(monkeypatch):
     )
 
     assert response.status_code == 403
+
+
+def test_reset_password_success_for_admin(monkeypatch):
+    monkeypatch.setattr(profiles_router, "reset_profile_password", lambda **_kwargs: (True, "password reset"))
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/profiles/new.user/reset-password",
+        headers=_auth_header(username="admin", is_admin=True),
+        json={"new_password": "Nueva#2026"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["username"] == "new.user"
+
+
+def test_reset_password_forbidden_for_non_admin(monkeypatch):
+    monkeypatch.setattr(profiles_router, "reset_profile_password", lambda **_kwargs: (True, "password reset"))
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/profiles/new.user/reset-password",
+        headers=_auth_header(username="sergio", is_admin=False),
+        json={"new_password": "Nueva#2026"},
+    )
+
+    assert response.status_code == 403

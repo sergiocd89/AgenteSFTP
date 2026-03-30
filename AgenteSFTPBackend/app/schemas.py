@@ -62,6 +62,10 @@ class ProfileOperationResponse(BaseModel):
     username: str
 
 
+class ProfileResetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=1)
+
+
 class LlmGenerateRequest(BaseModel):
     system_role: str = Field(min_length=1)
     user_content: str = Field(min_length=1)

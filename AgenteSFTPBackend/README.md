@@ -49,6 +49,7 @@ python -m uvicorn AgenteSFTPBackend.app.main:app --reload --port 8000
 - `GET /api/v1/profiles/me/modules/{module_key}` (Bearer token)
 - `POST /api/v1/profiles` (Bearer token, solo admin)
 - `PUT /api/v1/profiles/{username}` (Bearer token, solo admin)
+- `POST /api/v1/profiles/{username}/reset-password` (Bearer token, solo admin)
 - `POST /api/v1/llm/generate` (Bearer token)
 
 ## Próximos pasos

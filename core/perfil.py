@@ -392,7 +392,17 @@ def show_profile_admin() -> None:
                         new_allowed.append(key)
 
             if do_reset_password:
-                if provider in {"postgres", "postgresql", "db", "sqlserver", "mssql"}:
+                if use_backend:
+                    ok_reset, msg_reset = backend_api_client.reset_profile_password(
+                        token=token,
+                        username=user,
+                        new_password=reset_password_value,
+                    )
+                    if ok_reset:
+                        st.success(msg_reset)
+                    else:
+                        st.error(msg_reset)
+                elif provider in {"postgres", "postgresql", "db", "sqlserver", "mssql"}:
                     actor = st.session_state.get("username", "system")
                     ok_reset, msg_reset = service.admin_reset_password(user, reset_password_value, actor)
                     if ok_reset:

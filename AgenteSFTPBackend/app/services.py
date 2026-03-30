@@ -156,6 +156,15 @@ def create_profile(
     )
 
 
+def reset_profile_password(username: str, new_password: str, actor: str) -> tuple[bool, str]:
+    service = build_profile_service()
+    return service.admin_reset_password(
+        username=(username or "").strip(),
+        new_plain_password=new_password,
+        actor=(actor or "system").strip() or "system",
+    )
+
+
 def generate_llm_text(system_role: str, user_content: str, model: str, temp: float) -> dict:
     gateway, provider = resolve_llm_gateway()
     if gateway is None:
