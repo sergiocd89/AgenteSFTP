@@ -247,6 +247,57 @@ def generate_llm(token: str, system_role: str, user_content: str, model: str, te
     }
 
 
+def execute_workflow_step(
+    token: str,
+    workflow: str,
+    step: str,
+    source_input: str,
+    context: str,
+    model: str,
+    temp: float,
+) -> tuple[bool, dict[str, Any]]:
+    workflow_key = (workflow or "").strip().lower()
+    step_key = (step or "").strip().lower()
+
+    ok, _status, body = _http_json(
+        "POST",
+        f"/api/v1/workflows/{workflow_key}/{step_key}",
+        payload={
+            "input": source_input or "",
+            "context": context or "",
+            "model": model,
+            "temp": temp,
+        },
+        token=token,
+        timeout=60.0,
+    )
+    if ok:
+        return True, body
+
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        return False, {
+            "success": False,
+            "message": str(detail.get("message", "Error al ejecutar workflow en backend.")),
+            "error_code": detail.get("error_code"),
+            "content": None,
+        }
+    if isinstance(detail, str):
+        return False, {
+            "success": False,
+            "message": detail,
+            "error_code": None,
+            "content": None,
+        }
+
+    return False, {
+        "success": False,
+        "message": str(body.get("message", "Error al ejecutar workflow en backend.")),
+        "error_code": None,
+        "content": None,
+    }
+
+
 def create_jira_issue(
     token: str,
     base_url: str,

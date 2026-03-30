@@ -52,6 +52,31 @@ def _build_documents_context(uploaded_files) -> tuple[str, list[str]]:
 
 def _run_agent(agent_filename: str, user_content: str) -> str:
     """Ejecuta un agente por archivo de prompt y maneja fallback de errores."""
+    requirement_step_map = {
+        "Agent_Requirement_WorkFlow_01_Creator_Use_Case.md": "create",
+        "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md": "refine",
+        "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md": "diagram",
+        "Agent_Requirement_WorkFlow_05_Sizer.md": "size",
+        "Agent_Requirement_WorkFlow_06_Generator_Test_Case.md": "test_cases",
+        "Agent_Requirement_WorkFlow_07_issue_formatter.md": "format_issue",
+    }
+
+    step = requirement_step_map.get(agent_filename)
+    if step and backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        ok, payload = run_backend_operation_with_retry(
+            lambda token: backend_api_client.execute_workflow_step(
+                token=token,
+                workflow="requirement",
+                step=step,
+                source_input=user_content,
+                context="",
+                model=st.session_state.model_name,
+                temp=st.session_state.temp,
+            )
+        )
+        if ok and isinstance(payload, dict):
+            return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+
     sys_role = load_agent_prompt(agent_filename)
     result = run_llm_text(
         sys_role,

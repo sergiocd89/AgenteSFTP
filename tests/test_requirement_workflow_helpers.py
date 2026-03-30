@@ -116,3 +116,40 @@ def test_resolve_story_blocks_from_source_builds_titles():
     assert blocks[1].startswith("[US-002]")
     assert len(titles) == 2
     assert "Alta de cliente" in titles[0]
+
+
+def test_run_agent_uses_backend_workflow_when_enabled(monkeypatch):
+    workflow = _import_workflow_module()
+
+    workflow.st.session_state["backend_access_token"] = "token"
+    workflow.st.session_state["model_name"] = "gpt-4o"
+    workflow.st.session_state["temp"] = 0.0
+
+    monkeypatch.setattr(workflow.backend_api_client, "is_backend_enabled", lambda: True)
+
+    def _fake_retry(operation):
+        ok, payload = operation("token")
+        return ok, payload
+
+    monkeypatch.setattr(workflow, "run_backend_operation_with_retry", _fake_retry)
+    monkeypatch.setattr(
+        workflow.backend_api_client,
+        "execute_workflow_step",
+        lambda **kwargs: (True, {"content": f"backend:{kwargs['step']}"}),
+    )
+
+    result = workflow._run_agent("Agent_Requirement_WorkFlow_01_Creator_Use_Case.md", "entrada")
+
+    assert result == "backend:create"
+
+
+def test_run_agent_falls_back_to_local_when_backend_disabled(monkeypatch):
+    workflow = _import_workflow_module()
+
+    monkeypatch.setattr(workflow.backend_api_client, "is_backend_enabled", lambda: False)
+    monkeypatch.setattr(workflow, "load_agent_prompt", lambda _name: "sys-role")
+    monkeypatch.setattr(workflow, "run_llm_text", lambda *_args, **_kwargs: "local-result")
+
+    result = workflow._run_agent("Agent_Requirement_WorkFlow_01_Creator_Use_Case.md", "entrada")
+
+    assert result == "local-result"
