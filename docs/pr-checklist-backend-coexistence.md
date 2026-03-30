@@ -53,3 +53,10 @@ Adjuntar en la descripción del PR:
 - [ ] Equipo frontend valida UX de coexistencia y fallback.
 - [ ] Aprobación funcional de login, perfiles y LLM en ambiente de prueba.
 - [ ] Plan de despliegue faseado aceptado.
+
+## 8. Comandos rápidos de validación
+
+```powershell
+python -m pytest tests/test_login.py tests/test_perfil.py tests/test_utils.py -q
+python -m pytest AgenteSFTPBackend/tests -q
+```
