@@ -71,6 +71,15 @@ Workflows soportados en este primer corte:
 - `requirement` (`create`, `refine`, `diagram`, `size`, `test_cases`, `format_issue`)
 - `documentation` (`analyze`)
 
+## Observabilidad (Coexistencia)
+
+En la fase de coexistencia, el front Streamlit añade trazabilidad por operación con `request_id` y la registra en logs con:
+
+- `operation=workflow_step_backend`
+- `details=request_id=<id> workflow=<workflow> step=<step> duration_ms=<ms>`
+
+Ante errores backend en flujos de Jira/Confluence, el front expone ese `request_id` en el mensaje de UI para facilitar soporte y correlación.
+
 ## Estado Actual
 
 Este backend ya cubre:

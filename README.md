@@ -328,6 +328,26 @@ Notas operativas:
 - Si backend está deshabilitado o no hay token válido, el front conserva ejecución local.
 - La estrategia permite rollout gradual sin romper operación actual.
 
+## Observabilidad y Trazabilidad
+
+La UI Streamlit registra operaciones de workflow backend con un identificador corto `request_id` para correlación de soporte.
+
+- Log estándar de workflow backend: `operation=workflow_step_backend`
+- Campos en `details`: `request_id`, `workflow`, `step`, `duration_ms`
+- Cuando falla una operación backend de Jira/Confluence en UI, el mensaje mostrado incluye `request_id`.
+
+Ejemplo de log:
+
+```text
+operation=workflow_step_backend | status=failure | error_code=timeout | details=request_id=ab12cd34ef56 workflow=requirement step=create duration_ms=9342
+```
+
+Recomendación operativa:
+
+1. Copiar el `request_id` mostrado en UI o en logs.
+2. Buscar ese `request_id` en logs de Streamlit para ubicar workflow y step exactos.
+3. Cruzar con hora y endpoint backend (`/api/v1/workflows/*` o `/api/v1/integrations/*`) para diagnóstico.
+
 ## Checklist de PR
 
 Para preparar el PR de separación y convivencia Streamlit + FastAPI, usa:
