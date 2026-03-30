@@ -1,5 +1,6 @@
 from core import login
 import pytest
+import time
 
 
 class _SessionState(dict):
@@ -189,3 +190,55 @@ def test_render_change_password_section_confirm_mismatch(monkeypatch):
     login.render_change_password_section()
 
     assert any("no coincide" in msg.lower() for msg in fake_st.errors)
+
+
+def test_ensure_backend_token_fresh_refreshes_when_expiring(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={
+            "backend_access_token": "old-token",
+            "backend_profile": {},
+            "backend_token_expires_at": time.time() - 10,
+        }
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+    monkeypatch.setattr(
+        login.backend_api_client,
+        "refresh_access_token",
+        lambda _token: (
+            True,
+            "ok",
+            {
+                "access_token": "new-token",
+                "expires_in": 300,
+                "modules": ["SFTP"],
+                "is_admin": True,
+            },
+        ),
+        raising=True,
+    )
+
+    assert login.ensure_backend_token_fresh() is True
+    assert fake_st.session_state.backend_access_token == "new-token"
+    assert fake_st.session_state.backend_profile["is_admin"] is True
+
+
+def test_ensure_backend_token_fresh_keeps_token_if_not_expiring(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={
+            "backend_access_token": "same-token",
+            "backend_profile": {},
+            "backend_token_expires_at": time.time() + 600,
+        }
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+    monkeypatch.setattr(
+        login.backend_api_client,
+        "refresh_access_token",
+        lambda _token: (_ for _ in ()).throw(AssertionError("refresh should not be called")),
+        raising=True,
+    )
+
+    assert login.ensure_backend_token_fresh() is True
+    assert fake_st.session_state.backend_access_token == "same-token"

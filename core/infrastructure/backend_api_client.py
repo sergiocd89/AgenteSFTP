@@ -78,6 +78,21 @@ def login(username: str, password: str) -> tuple[bool, str, dict[str, Any]]:
     return False, str(body.get("message", "No fue posible autenticar contra backend.")), body
 
 
+def refresh_access_token(token: str) -> tuple[bool, str, dict[str, Any]]:
+    ok, status, body = _http_json("POST", "/api/v1/auth/refresh", token=token)
+    if ok:
+        return True, str(body.get("message", "Token renovado correctamente.")), body
+
+    detail = body.get("detail")
+    if isinstance(detail, str):
+        return False, detail, body
+    if isinstance(detail, dict):
+        return False, str(detail.get("message", "No fue posible renovar sesión.")), body
+    if status in {401, 403}:
+        return False, "Sesión inválida o expirada. Vuelve a iniciar sesión.", body
+    return False, str(body.get("message", "No fue posible renovar sesión en backend.")), body
+
+
 def change_password(token: str, current_password: str, new_password: str) -> tuple[bool, str]:
     ok, status, body = _http_json(
         "POST",

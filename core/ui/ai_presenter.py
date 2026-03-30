@@ -1,5 +1,6 @@
 import streamlit as st
 
+from core.login import ensure_backend_token_fresh
 from core.domain.ai_service import call_llm as domain_call_llm
 from core.infrastructure import backend_api_client
 from core.infrastructure.llm.factory import resolve_llm_gateway
@@ -11,6 +12,7 @@ logger = get_logger(__name__)
 
 def run_llm_text(system_role: str, user_content: str, model: str, temp: float) -> str | None:
     """Adaptador de UI para ejecutar LLM y mostrar errores amigables en Streamlit."""
+    ensure_backend_token_fresh()
     token = str(st.session_state.get("backend_access_token", "") or "")
     if backend_api_client.is_backend_enabled() and token:
         ok, payload = backend_api_client.generate_llm(token, system_role, user_content, model, temp)

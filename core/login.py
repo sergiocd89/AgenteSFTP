@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from core.utils import check_credentials, change_user_password
 from core.infrastructure import backend_api_client
 
@@ -21,6 +22,7 @@ def _init_auth_state() -> None:
         "login_error": False,
         "backend_access_token": "",
         "backend_profile": {},
+        "backend_token_expires_at": 0.0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -79,11 +81,14 @@ def show_login() -> None:
                                     "modules": list(data.get("modules") or []),
                                     "is_admin": bool(data.get("is_admin", False)),
                                 }
+                                expires_in = int(data.get("expires_in") or 0)
+                                st.session_state.backend_token_expires_at = time.time() + max(expires_in, 0)
                                 authenticated = True
 
                         if not authenticated and check_credentials(normalized_username, normalized_password):
                             st.session_state.backend_access_token = ""
                             st.session_state.backend_profile = {}
+                            st.session_state.backend_token_expires_at = 0.0
                             authenticated = True
 
                         if authenticated:
@@ -129,6 +134,7 @@ def render_change_password_section() -> None:
 
             ok = False
             message = "No fue posible actualizar la contraseña."
+            ensure_backend_token_fresh()
             token = str(st.session_state.get("backend_access_token", "") or "")
             if backend_api_client.is_backend_enabled() and token:
                 ok, message = backend_api_client.change_password(token, current_password, new_password)
@@ -138,3 +144,34 @@ def render_change_password_section() -> None:
                 st.success(f"✅ {message}")
             else:
                 st.error(f"⚠️ {message}")
+
+
+def ensure_backend_token_fresh(min_ttl_seconds: int = 120) -> bool:
+    """Renueva el token backend cuando está próximo a expirar."""
+    _init_auth_state()
+    if not backend_api_client.is_backend_enabled():
+        return False
+
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if not token:
+        return False
+
+    expires_at = float(st.session_state.get("backend_token_expires_at", 0.0) or 0.0)
+    if expires_at - time.time() > float(min_ttl_seconds):
+        return True
+
+    ok, _message, data = backend_api_client.refresh_access_token(token)
+    if not ok:
+        st.session_state.backend_access_token = ""
+        st.session_state.backend_profile = {}
+        st.session_state.backend_token_expires_at = 0.0
+        return False
+
+    st.session_state.backend_access_token = str(data.get("access_token", ""))
+    st.session_state.backend_profile = {
+        "modules": list(data.get("modules") or []),
+        "is_admin": bool(data.get("is_admin", False)),
+    }
+    expires_in = int(data.get("expires_in") or 0)
+    st.session_state.backend_token_expires_at = time.time() + max(expires_in, 0)
+    return bool(st.session_state.backend_access_token)

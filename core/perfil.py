@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from core.login import ensure_backend_token_fresh
 from core.domain.profile_service import ProfileService
 from core.infrastructure import auth_db
 from core.infrastructure import backend_api_client
@@ -126,6 +127,7 @@ def create_user_profile(
     if not ok_inputs:
         return False, msg_inputs
 
+    ensure_backend_token_fresh()
     token = str(st.session_state.get("backend_access_token", "") or "")
     if backend_api_client.is_backend_enabled() and token:
         return backend_api_client.create_profile(
@@ -183,6 +185,7 @@ def _load_profiles_and_admins_from_env() -> tuple[dict[str, list[str]], set[str]
 
 def get_user_modules(username: str) -> list[str]:
     """Retorna la lista de claves de módulos habilitados para el usuario."""
+    ensure_backend_token_fresh()
     current_username = str(st.session_state.get("username", "") or "")
     token = str(st.session_state.get("backend_access_token", "") or "")
     if (
@@ -209,6 +212,7 @@ def has_module_access(username: str, module_key: str) -> bool:
     if module_key not in MODULES:
         raise ValueError(f"module_key no soportado: {module_key}")
 
+    ensure_backend_token_fresh()
     current_username = str(st.session_state.get("username", "") or "")
     token = str(st.session_state.get("backend_access_token", "") or "")
     if (
@@ -226,6 +230,7 @@ def has_module_access(username: str, module_key: str) -> bool:
 
 def is_admin(username: str) -> bool:
     """Devuelve True si el usuario tiene rol administrador."""
+    ensure_backend_token_fresh()
     current_username = str(st.session_state.get("username", "") or "")
     token = str(st.session_state.get("backend_access_token", "") or "")
     if (
@@ -269,6 +274,7 @@ def show_profile_admin() -> None:
     module_keys = list(MODULES.keys())
     provider = _get_auth_provider()
     service = _build_profile_service()
+    ensure_backend_token_fresh()
     token = str(st.session_state.get("backend_access_token", "") or "")
     use_backend = backend_api_client.is_backend_enabled() and bool(token)
 
