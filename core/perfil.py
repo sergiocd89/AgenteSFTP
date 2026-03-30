@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from core.login import ensure_backend_token_fresh
+from core.login import ensure_backend_token_fresh, run_backend_operation_with_retry
 from core.domain.profile_service import ProfileService
 from core.infrastructure import auth_db
 from core.infrastructure import backend_api_client
@@ -130,14 +130,16 @@ def create_user_profile(
     ensure_backend_token_fresh()
     token = str(st.session_state.get("backend_access_token", "") or "")
     if backend_api_client.is_backend_enabled() and token:
-        return backend_api_client.create_profile(
-            token=token,
-            username=safe_username,
-            plain_password=safe_password,
-            full_name=full_name,
-            is_admin=bool(is_admin_user),
-            is_active=bool(is_active_user),
-            modules=valid_module_keys,
+        return run_backend_operation_with_retry(
+            lambda current_token: backend_api_client.create_profile(
+                token=current_token,
+                username=safe_username,
+                plain_password=safe_password,
+                full_name=full_name,
+                is_admin=bool(is_admin_user),
+                is_active=bool(is_active_user),
+                modules=valid_module_keys,
+            )
         )
 
     provider = _get_auth_provider()
@@ -399,10 +401,12 @@ def show_profile_admin() -> None:
 
             if do_reset_password:
                 if use_backend:
-                    ok_reset, msg_reset = backend_api_client.reset_profile_password(
-                        token=token,
-                        username=user,
-                        new_password=reset_password_value,
+                    ok_reset, msg_reset = run_backend_operation_with_retry(
+                        lambda current_token: backend_api_client.reset_profile_password(
+                            token=current_token,
+                            username=user,
+                            new_password=reset_password_value,
+                        )
                     )
                     if ok_reset:
                         st.success(msg_reset)
@@ -433,13 +437,15 @@ def show_profile_admin() -> None:
 
             if modules_changed or meta_changed:
                 if use_backend:
-                    ok_upd, msg_upd = backend_api_client.update_profile(
-                        token=token,
-                        username=user,
-                        full_name=(new_full_name or "").strip(),
-                        is_admin=bool(new_is_admin),
-                        is_active=bool(new_is_active),
-                        modules=new_allowed,
+                    ok_upd, msg_upd = run_backend_operation_with_retry(
+                        lambda current_token: backend_api_client.update_profile(
+                            token=current_token,
+                            username=user,
+                            full_name=(new_full_name or "").strip(),
+                            is_admin=bool(new_is_admin),
+                            is_active=bool(new_is_active),
+                            modules=new_allowed,
+                        )
                     )
                     if ok_upd:
                         apply_local_user_changes(

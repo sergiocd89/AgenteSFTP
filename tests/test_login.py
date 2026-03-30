@@ -242,3 +242,39 @@ def test_ensure_backend_token_fresh_keeps_token_if_not_expiring(monkeypatch):
 
     assert login.ensure_backend_token_fresh() is True
     assert fake_st.session_state.backend_access_token == "same-token"
+
+
+def test_run_backend_operation_with_retry_on_auth_error(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={
+            "backend_access_token": "old-token",
+            "backend_profile": {},
+            "backend_token_expires_at": time.time() + 600,
+        }
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+
+    attempts = {"n": 0}
+
+    def _op(token):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            return False, "Sesión inválida o expirada. Vuelve a iniciar sesión."
+        return True, f"ok:{token}"
+
+    def _refresh_access_token(_token):
+        return True, "ok", {
+            "access_token": "new-token",
+            "expires_in": 300,
+            "modules": ["SFTP"],
+            "is_admin": False,
+        }
+
+    monkeypatch.setattr(login.backend_api_client, "refresh_access_token", _refresh_access_token, raising=True)
+
+    ok, payload = login.run_backend_operation_with_retry(_op)
+
+    assert ok is True
+    assert payload == "ok:new-token"
+    assert attempts["n"] == 2

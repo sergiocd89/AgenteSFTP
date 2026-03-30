@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+from typing import Any, Callable
 from core.utils import check_credentials, change_user_password
 from core.infrastructure import backend_api_client
 
@@ -114,6 +115,48 @@ def render_logout_button() -> None:
         st.rerun()
 
 
+def _looks_like_auth_error(message: str) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+    markers = [
+        "sesión inválida",
+        "sesion invalida",
+        "sesión expirada",
+        "sesion expirada",
+        "token inválido",
+        "token invalido",
+        "token expired",
+    ]
+    return any(marker in text for marker in markers)
+
+
+def run_backend_operation_with_retry(
+    operation: Callable[[str], tuple[bool, Any]],
+) -> tuple[bool, Any]:
+    """Ejecuta una operación backend autenticada y reintenta una vez tras refresh forzado."""
+    ensure_backend_token_fresh()
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if not token:
+        return False, "Sesión inválida o expirada. Vuelve a iniciar sesión."
+
+    ok, payload = operation(token)
+    if ok:
+        return ok, payload
+
+    message = payload if isinstance(payload, str) else str((payload or {}).get("message", ""))
+    if not _looks_like_auth_error(message):
+        return ok, payload
+
+    if not ensure_backend_token_fresh(force=True):
+        return False, "Sesión inválida o expirada. Vuelve a iniciar sesión."
+
+    token = str(st.session_state.get("backend_access_token", "") or "")
+    if not token:
+        return False, "Sesión inválida o expirada. Vuelve a iniciar sesión."
+    return operation(token)
+
+
 def render_change_password_section() -> None:
     """Renderiza sección para cambio de contraseña del usuario autenticado."""
     username = (st.session_state.get("username", "") or "").strip()
@@ -134,10 +177,10 @@ def render_change_password_section() -> None:
 
             ok = False
             message = "No fue posible actualizar la contraseña."
-            ensure_backend_token_fresh()
-            token = str(st.session_state.get("backend_access_token", "") or "")
-            if backend_api_client.is_backend_enabled() and token:
-                ok, message = backend_api_client.change_password(token, current_password, new_password)
+            if backend_api_client.is_backend_enabled():
+                ok, message = run_backend_operation_with_retry(
+                    lambda token: backend_api_client.change_password(token, current_password, new_password)
+                )
             else:
                 ok, message = change_user_password(username, current_password, new_password)
             if ok:
@@ -146,7 +189,7 @@ def render_change_password_section() -> None:
                 st.error(f"⚠️ {message}")
 
 
-def ensure_backend_token_fresh(min_ttl_seconds: int = 120) -> bool:
+def ensure_backend_token_fresh(min_ttl_seconds: int = 120, force: bool = False) -> bool:
     """Renueva el token backend cuando está próximo a expirar."""
     _init_auth_state()
     if not backend_api_client.is_backend_enabled():
@@ -157,7 +200,7 @@ def ensure_backend_token_fresh(min_ttl_seconds: int = 120) -> bool:
         return False
 
     expires_at = float(st.session_state.get("backend_token_expires_at", 0.0) or 0.0)
-    if expires_at - time.time() > float(min_ttl_seconds):
+    if (not force) and (expires_at - time.time() > float(min_ttl_seconds)):
         return True
 
     ok, _message, data = backend_api_client.refresh_access_token(token)
