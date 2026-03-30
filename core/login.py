@@ -1,5 +1,5 @@
 import streamlit as st
-from core.utils import check_credentials
+from core.utils import check_credentials, change_user_password
 
 
 def _normalize_login_inputs(username: str, password: str) -> tuple[str, str]:
@@ -88,3 +88,28 @@ def render_logout_button() -> None:
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+
+
+def render_change_password_section() -> None:
+    """Renderiza sección para cambio de contraseña del usuario autenticado."""
+    username = (st.session_state.get("username", "") or "").strip()
+    if not username:
+        return
+
+    with st.expander("🔐 Cambiar contraseña", expanded=False):
+        with st.form("change_password_form", clear_on_submit=True):
+            current_password = st.text_input("Contraseña actual", type="password")
+            new_password = st.text_input("Nueva contraseña", type="password")
+            confirm_password = st.text_input("Confirmar nueva contraseña", type="password")
+            submitted = st.form_submit_button("Actualizar contraseña", use_container_width=True)
+
+        if submitted:
+            if (new_password or "") != (confirm_password or ""):
+                st.error("⚠️ La confirmación de contraseña no coincide.")
+                return
+
+            ok, message = change_user_password(username, current_password, new_password)
+            if ok:
+                st.success(f"✅ {message}")
+            else:
+                st.error(f"⚠️ {message}")

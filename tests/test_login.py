@@ -36,6 +36,7 @@ class _FakeStreamlit:
         self._submitted = submitted
         self._logout_click = logout_click
         self.errors = []
+        self.successes = []
 
     def markdown(self, *args, **kwargs):
         return None
@@ -61,6 +62,9 @@ class _FakeStreamlit:
     def form(self, *args, **kwargs):
         return _Ctx()
 
+    def expander(self, *args, **kwargs):
+        return _Ctx()
+
     def text_input(self, *args, **kwargs):
         if self._text_inputs:
             return self._text_inputs.pop(0)
@@ -71,6 +75,9 @@ class _FakeStreamlit:
 
     def error(self, message):
         self.errors.append(message)
+
+    def success(self, message):
+        self.successes.append(message)
 
     def stop(self):
         raise _StopCalled()
@@ -155,3 +162,30 @@ def test_render_logout_button_clears_session_and_rerun(monkeypatch):
         pass
 
     assert fake_st.session_state == {}
+
+
+def test_render_change_password_section_success(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={"username": "user.demo"},
+        text_inputs=["old-pass", "new-pass", "new-pass"],
+        submitted=True,
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login, "change_user_password", lambda *_args: (True, "Contraseña actualizada"), raising=True)
+
+    login.render_change_password_section()
+
+    assert any("actualizada" in msg for msg in fake_st.successes)
+
+
+def test_render_change_password_section_confirm_mismatch(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={"username": "user.demo"},
+        text_inputs=["old-pass", "new-pass", "other-pass"],
+        submitted=True,
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+
+    login.render_change_password_section()
+
+    assert any("no coincide" in msg.lower() for msg in fake_st.errors)

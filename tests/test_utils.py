@@ -127,3 +127,24 @@ def test_check_credentials_sqlserver_returns_false_on_connection_error(monkeypat
 	monkeypatch.setattr(utils, "pyodbc", _BrokenPyodbc, raising=True)
 
 	assert utils.check_credentials("tester", "secret") is False
+
+
+def test_change_user_password_env_success(monkeypatch):
+	old_hash = hashlib.sha256("old-pass".encode()).hexdigest()
+	monkeypatch.setenv("AUTH_PROVIDER", "env")
+	monkeypatch.setenv("AUTH_USERS_JSON", '{"tester":"' + old_hash + '"}')
+
+	ok, _ = utils.change_user_password("tester", "old-pass", "new-pass")
+	assert ok is True
+	assert utils.check_credentials("tester", "new-pass") is True
+	assert utils.check_credentials("tester", "old-pass") is False
+
+
+def test_change_user_password_env_rejects_invalid_current(monkeypatch):
+	old_hash = hashlib.sha256("old-pass".encode()).hexdigest()
+	monkeypatch.setenv("AUTH_PROVIDER", "env")
+	monkeypatch.setenv("AUTH_USERS_JSON", '{"tester":"' + old_hash + '"}')
+
+	ok, message = utils.change_user_password("tester", "wrong", "new-pass")
+	assert ok is False
+	assert "actual" in message.lower()

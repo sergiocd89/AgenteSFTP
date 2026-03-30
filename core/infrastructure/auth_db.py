@@ -101,3 +101,67 @@ def check_credentials_sqlserver(
             return bool(row and row[0])
     except Exception:
         return False
+
+
+def change_password_env(users: dict[str, str], username: str, new_password: str) -> tuple[bool, str]:
+    if not users or username not in users:
+        return False, "Usuario no encontrado en configuración local."
+
+    users[username] = hashlib.sha256((new_password or "").encode()).hexdigest()
+    return True, "Contraseña actualizada en modo env (solo sesión actual)."
+
+
+def change_password_postgres(
+    username: str,
+    new_password: str,
+    actor: str,
+    psycopg_module: Any,
+) -> tuple[bool, str]:
+    if psycopg_module is None:
+        return False, "psycopg no está disponible para cambiar contraseña en PostgreSQL."
+
+    database_url = get_database_url()
+    if not database_url:
+        return False, "DATABASE_URL es obligatorio para cambiar contraseña en PostgreSQL."
+
+    try:
+        with psycopg_module.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "CALL app_auth.sp_admin_reset_password(%s, %s, %s);",
+                    (username, new_password, actor),
+                )
+            conn.commit()
+    except Exception as exc:
+        return False, f"No fue posible cambiar contraseña en PostgreSQL: {exc}"
+
+    return True, "Contraseña actualizada correctamente."
+
+
+def change_password_sqlserver(
+    username: str,
+    new_password: str,
+    actor: str,
+    pyodbc_module: Any,
+) -> tuple[bool, str]:
+    if pyodbc_module is None:
+        return False, "pyodbc no está disponible para cambiar contraseña en SQL Server."
+
+    conn_str = build_sqlserver_conn_str()
+    if not conn_str:
+        return False, "Config SQL Server incompleta para cambiar contraseña."
+
+    try:
+        with pyodbc_module.connect(conn_str, timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "EXEC app_auth.sp_admin_reset_password @username=?, @new_plain_password=?, @actor=?;",
+                username,
+                new_password,
+                actor,
+            )
+            conn.commit()
+    except Exception as exc:
+        return False, f"No fue posible cambiar contraseña en SQL Server: {exc}"
+
+    return True, "Contraseña actualizada correctamente."

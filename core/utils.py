@@ -109,6 +109,33 @@ def check_credentials(username: str, password: str) -> bool:
 
     return auth_service.check_credentials(username, password, users, psycopg, pyodbc)
 
+
+def change_user_password(username: str, current_password: str, new_password: str) -> tuple[bool, str]:
+    """Cambia la contraseña del usuario autenticado según AUTH_PROVIDER."""
+    safe_username = (username or "").strip()
+    safe_current = (current_password or "").strip()
+    safe_new = (new_password or "").strip()
+
+    if not safe_username:
+        return False, "Usuario inválido para cambio de contraseña."
+    if not safe_current:
+        return False, "Debes ingresar tu contraseña actual."
+    if not safe_new:
+        return False, "Debes ingresar una nueva contraseña."
+    if safe_current == safe_new:
+        return False, "La nueva contraseña debe ser diferente a la actual."
+
+    users = _load_users_from_env() or _USERS
+    ok, message = auth_service.change_password(safe_username, safe_current, safe_new, users, psycopg, pyodbc)
+
+    # En modo env, persistimos el cambio al menos en memoria de proceso.
+    if ok and _get_auth_provider() in {"env", ""}:
+        _USERS.clear()
+        _USERS.update(users)
+        os.environ["AUTH_USERS_JSON"] = json.dumps(users)
+
+    return ok, message
+
 # --- 1. GESTIÓN DE PROMPTS ---
 @st.cache_data(ttl=3600)
 def load_agent_prompt(filename: str) -> str:
