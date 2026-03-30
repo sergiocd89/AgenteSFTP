@@ -78,3 +78,19 @@ class LlmGenerateResponse(BaseModel):
     message: str
     content: str | None = None
     error_code: str | None = None
+
+
+class WorkflowStepRequest(BaseModel):
+    input: str = ""
+    context: str = ""
+    model: str = Field(min_length=1)
+    temp: float = 0.0
+
+
+class WorkflowStepResponse(BaseModel):
+    success: bool
+    message: str
+    workflow: str
+    step: str
+    content: str | None = None
+    error_code: str | None = None

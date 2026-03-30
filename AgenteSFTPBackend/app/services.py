@@ -7,6 +7,7 @@ from core.domain.auth_service import change_password, check_credentials
 from core.domain.profile_service import ProfileService
 from core.infrastructure import auth_db
 from core.infrastructure.llm.factory import resolve_llm_gateway
+from core.infrastructure.prompt_repository import read_agent_prompt
 
 try:
     import psycopg
@@ -25,6 +26,48 @@ MODULES: dict[str, dict] = {
     "DTSX": {},
     "RequirementWorkflow": {},
     "Documentation": {},
+}
+
+
+WORKFLOW_STEP_PROMPTS: dict[str, dict[str, str]] = {
+    "sftp": {
+        "analyze": "01_analyst_AS400SFTP.md",
+        "architect": "02_architect_AS400SFTP.md",
+        "develop": "03_developer_AS400SFTP.md",
+        "audit": "04_auditor_AS400SFTP.md",
+    },
+    "cobol_python": {
+        "analyze": "01_analyst_CobolToPython.md",
+        "architect": "02_architect_CobolToPython.md",
+        "develop": "03_developer_CobolToPython.md",
+        "audit": "04_auditor_CobolToPython.md",
+    },
+    "cobol_dtsx": {
+        "analyze": "01_analyst_CobolToDtsx.md",
+        "architect": "02_architect_CobolToDtsx.md",
+        "develop": "03_developer_CobolToDtsx.md",
+        "audit": "04_auditor_CobolToDtsx.md",
+    },
+    "requirement": {
+        "create": "Agent_Requirement_WorkFlow_01_Creator_Use_Case.md",
+        "refine": "Agent_Requirement_WorkFlow_02_Refiner_Use_Case.md",
+        "diagram": "Agent_Requirement_WorkFlow_04_Diagram_Use_Case.md",
+        "size": "Agent_Requirement_WorkFlow_05_Sizer.md",
+        "test_cases": "Agent_Requirement_WorkFlow_06_Generator_Test_Case.md",
+        "format_issue": "Agent_Requirement_WorkFlow_07_issue_formatter.md",
+    },
+    "documentation": {
+        "analyze": "00_documentator.md",
+    },
+}
+
+
+WORKFLOW_MODULE_MAP: dict[str, str] = {
+    "sftp": "SFTP",
+    "cobol_python": "COBOL",
+    "cobol_dtsx": "DTSX",
+    "requirement": "RequirementWorkflow",
+    "documentation": "Documentation",
 }
 
 
@@ -182,3 +225,56 @@ def generate_llm_text(system_role: str, user_content: str, model: str, temp: flo
         temp=temp,
         llm_gateway=gateway,
     )
+
+
+def get_workflow_module_key(workflow: str) -> str | None:
+    return WORKFLOW_MODULE_MAP.get((workflow or "").strip().lower())
+
+
+def execute_workflow_step(
+    workflow: str,
+    step: str,
+    source_input: str,
+    context: str,
+    model: str,
+    temp: float,
+) -> dict:
+    workflow_key = (workflow or "").strip().lower()
+    step_key = (step or "").strip().lower()
+
+    prompts = WORKFLOW_STEP_PROMPTS.get(workflow_key)
+    if not prompts:
+        return {
+            "success": False,
+            "message": f"Workflow no soportado: {workflow}",
+            "data": None,
+            "error_code": "unsupported_workflow",
+        }
+
+    prompt_file = prompts.get(step_key)
+    if not prompt_file:
+        return {
+            "success": False,
+            "message": f"Step no soportado para workflow {workflow}: {step}",
+            "data": None,
+            "error_code": "unsupported_step",
+        }
+
+    system_role = read_agent_prompt(prompt_file)
+
+    source = (source_input or "").strip()
+    ctx = (context or "").strip()
+    if source and ctx:
+        user_content = f"Entrada principal:\n{source}\n\nContexto adicional:\n{ctx}"
+    else:
+        user_content = source or ctx
+
+    if not user_content:
+        return {
+            "success": False,
+            "message": "Debes enviar input o contexto para ejecutar el workflow.",
+            "data": None,
+            "error_code": "missing_input",
+        }
+
+    return generate_llm_text(system_role=system_role, user_content=user_content, model=model, temp=temp)

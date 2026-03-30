@@ -6,6 +6,7 @@ from .routers.auth import router as auth_router
 from .routers.health import router as health_router
 from .routers.llm import router as llm_router
 from .routers.profiles import router as profiles_router
+from .routers.workflows import router as workflows_router
 
 
 def build_app() -> FastAPI:
@@ -28,6 +29,7 @@ def build_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(profiles_router)
     app.include_router(llm_router)
+    app.include_router(workflows_router)
     return app
 
 

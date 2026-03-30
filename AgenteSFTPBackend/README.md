@@ -53,8 +53,18 @@ python -m uvicorn AgenteSFTPBackend.app.main:app --reload --port 8000
 - `PUT /api/v1/profiles/{username}` (Bearer token, solo admin)
 - `POST /api/v1/profiles/{username}/reset-password` (Bearer token, solo admin)
 - `POST /api/v1/llm/generate` (Bearer token)
+- `POST /api/v1/workflows/{workflow}/steps/{step}` (Bearer token)
+
+Workflows soportados en este primer corte:
+
+- `sftp` (`analyze`, `architect`, `develop`, `audit`)
+- `cobol_python` (`analyze`, `architect`, `develop`, `audit`)
+- `cobol_dtsx` (`analyze`, `architect`, `develop`, `audit`)
+- `requirement` (`create`, `refine`, `diagram`, `size`, `test_cases`, `format_issue`)
+- `documentation` (`analyze`)
 
 ## Próximos pasos
 
-- Endpoints de workflows (`sftp`, `cobol`, `dtsx`, `requirement`, `documentation`)
-- Pruebas de contrato API
+- Endpoints dedicados para integraciones externas (`jira`, `confluence`) backend-only
+- Endpoints especializados por flujo con payloads tipados por etapa
+- Pruebas de contrato API por endpoint especializado
