@@ -209,3 +209,12 @@ def test_run_documentation_analysis_falls_back_to_local(monkeypatch):
 
     output = module._run_documentation_analysis("entrada")
     assert output == "local-doc"
+
+
+def test_with_request_id_formats_message():
+    module = _import_doc_module()
+
+    message = module._with_request_id("Error de backend", "abc123")
+
+    assert "Error de backend" in message
+    assert "request_id=abc123" in message

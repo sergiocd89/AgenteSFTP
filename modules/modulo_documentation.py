@@ -483,6 +483,13 @@ def _run_documentation_analysis(user_content: str) -> str:
     )
     return result or "No se pudo generar la documentación para este archivo/paquete."
 
+
+def _with_request_id(message: str, request_id: str | None) -> str:
+    text = (message or "").strip() or "Error no especificado."
+    if not request_id:
+        return text
+    return f"{text} [request_id={request_id}]"
+
 def show_documentation_module() -> None:
     st.title("📝 Módulo Documentación de Archivos o Paquetes")
     st.caption("Genera documentación técnica automáticamente a partir de archivos o paquetes subidos.")
@@ -683,6 +690,7 @@ def show_documentation_module() -> None:
                 try:
                     with st.spinner("Subiendo documentacion a Confluence..."):
                         if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+                            request_id = uuid.uuid4().hex[:12]
                             ok, payload = run_backend_operation_with_retry(
                                 lambda token: backend_api_client.publish_confluence_page(
                                     token,
@@ -697,6 +705,11 @@ def show_documentation_module() -> None:
                             result = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
                             if ok:
                                 result["success"] = True
+                            else:
+                                result["message"] = _with_request_id(
+                                    str(result.get("message", "Error al subir a Confluence.")),
+                                    request_id,
+                                )
                         else:
                             result = publish_confluence_page(
                                 confluence_title.strip() or f"Documentación - {safe_name}",

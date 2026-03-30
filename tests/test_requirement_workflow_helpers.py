@@ -172,3 +172,12 @@ def test_run_agent_falls_back_to_local_when_backend_disabled(monkeypatch):
     result = workflow._run_agent("Agent_Requirement_WorkFlow_01_Creator_Use_Case.md", "entrada")
 
     assert result == "local-result"
+
+
+def test_with_request_id_formats_message():
+    workflow = _import_workflow_module()
+
+    message = workflow._with_request_id("Error de backend", "abc123")
+
+    assert "Error de backend" in message
+    assert "request_id=abc123" in message

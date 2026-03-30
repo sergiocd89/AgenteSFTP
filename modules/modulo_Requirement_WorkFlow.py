@@ -106,6 +106,13 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
     return result or "No se pudo obtener respuesta del modelo en este paso."
 
 
+def _with_request_id(message: str, request_id: str | None) -> str:
+    text = (message or "").strip() or "Error no especificado."
+    if not request_id:
+        return text
+    return f"{text} [request_id={request_id}]"
+
+
 def _split_user_stories(refined_text: str) -> list[str]:
     """Separa historias de usuario en bloques para diagramarlas individualmente."""
     if not refined_text or not refined_text.strip():
@@ -402,6 +409,7 @@ def show_requirement_workflow():
                     st.warning("Completa link, usuario y contraseña/token para consultar Confluence.")
                 else:
                     if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+                        request_id = uuid.uuid4().hex[:12]
                         ok, payload = run_backend_operation_with_retry(
                             lambda token: backend_api_client.get_confluence_metadata(
                                 token,
@@ -413,6 +421,11 @@ def show_requirement_workflow():
                         result_meta = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
                         if ok:
                             result_meta["success"] = True
+                        else:
+                            result_meta["message"] = _with_request_id(
+                                str(result_meta.get("message", "No se pudo consultar Confluence.")),
+                                request_id,
+                            )
                     else:
                         result_meta = resolve_confluence_metadata(
                             confluence_link.strip(),
@@ -462,6 +475,7 @@ def show_requirement_workflow():
                         and not st.session_state.reqwf_confluence_space_key
                     ):
                         if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+                            request_id = uuid.uuid4().hex[:12]
                             ok, payload = run_backend_operation_with_retry(
                                 lambda token: backend_api_client.get_confluence_metadata(
                                     token,
@@ -473,6 +487,11 @@ def show_requirement_workflow():
                             result_meta = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
                             if ok:
                                 result_meta["success"] = True
+                            else:
+                                result_meta["message"] = _with_request_id(
+                                    str(result_meta.get("message", "No se pudo consultar Confluence.")),
+                                    request_id,
+                                )
                         else:
                             result_meta = resolve_confluence_metadata(
                                 confluence_link.strip(),
@@ -795,6 +814,7 @@ def show_requirement_workflow():
                     )
 
                     if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+                        request_id = uuid.uuid4().hex[:12]
                         ok, payload = run_backend_operation_with_retry(
                             lambda token: backend_api_client.create_jira_issue(
                                 token,
@@ -810,6 +830,11 @@ def show_requirement_workflow():
                         result = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
                         if ok:
                             result["success"] = True
+                        else:
+                            result["message"] = _with_request_id(
+                                str(result.get("message", "Error al crear issue en Jira.")),
+                                request_id,
+                            )
                     else:
                         result = publish_jira_issue(
                             jira_base_url,
