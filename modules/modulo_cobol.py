@@ -1,6 +1,35 @@
 import streamlit as st
+from core.infrastructure import backend_api_client
+from core.login import run_backend_operation_with_retry
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
+
+
+def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: str = "") -> str:
+    """Ejecuta step COBOL->Python por backend y mantiene fallback local."""
+    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        ok, payload = run_backend_operation_with_retry(
+            lambda token: backend_api_client.execute_workflow_step(
+                token=token,
+                workflow="cobol_python",
+                step=step,
+                source_input=source_input,
+                context=context,
+                model=st.session_state.model_name,
+                temp=st.session_state.temp,
+            )
+        )
+        if ok and isinstance(payload, dict):
+            return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+
+    sys_role = load_agent_prompt(prompt_file)
+    result = run_llm_text(
+        sys_role,
+        source_input,
+        st.session_state.model_name,
+        st.session_state.temp,
+    )
+    return result or "No se pudo obtener respuesta del modelo en este paso."
 
 def show_cobol_migration():
     st.title("🐍 Migrador Cobol a Python")
@@ -40,10 +69,10 @@ def show_cobol_migration():
         step_header("Paso 2: Análisis de Lógica y Dependencias")
         if not st.session_state.cobol_analysis:
             if st.button("Ejecutar Agente Analista"):
-                sys_role = load_agent_prompt("01_analyst_CobolToPython.md")
-                st.session_state.cobol_analysis = run_llm_text(
-                    sys_role, st.session_state.cobol_source_code, 
-                    st.session_state.model_name, st.session_state.temp
+                st.session_state.cobol_analysis = _run_workflow_step(
+                    step="analyze",
+                    prompt_file="01_analyst_CobolToPython.md",
+                    source_input=st.session_state.cobol_source_code,
                 )
                 st.rerun()
         
@@ -58,10 +87,11 @@ def show_cobol_migration():
     if st.session_state.cobol_current_step >= 3:
         step_header("Paso 3: Propuesta Arquitectónica (Python)")
         if not st.session_state.cobol_arch_plan:
-            sys_role = load_agent_prompt("02_architect_CobolToPython.md")
             context = f"Código COBOL:\n{st.session_state.cobol_source_code}\n\nAnálisis:\n{st.session_state.cobol_analysis}"
-            st.session_state.cobol_arch_plan = run_llm_text(
-                sys_role, context, st.session_state.model_name, st.session_state.temp
+            st.session_state.cobol_arch_plan = _run_workflow_step(
+                step="architect",
+                prompt_file="02_architect_CobolToPython.md",
+                source_input=context,
             )
         
         st.session_state.cobol_arch_plan = st.text_area(
@@ -79,10 +109,11 @@ def show_cobol_migration():
         step_header("Paso 4: Generación de Código Python")
         if not st.session_state.cobol_python_code:
             with st.spinner("Traduciendo lógica COBOL a Python..."):
-                sys_role = load_agent_prompt("03_developer_CobolToPython.md")
                 context = f"Plan Aprobado:\n{st.session_state.cobol_arch_plan}\n\nFuente Original:\n{st.session_state.cobol_source_code}"
-                st.session_state.cobol_python_code = run_llm_text(
-                    sys_role, context, st.session_state.model_name, st.session_state.temp
+                st.session_state.cobol_python_code = _run_workflow_step(
+                    step="develop",
+                    prompt_file="03_developer_CobolToPython.md",
+                    source_input=context,
                 )
                 st.rerun()
         
@@ -99,10 +130,10 @@ def show_cobol_migration():
         
         # Auditoría automática si no existe
         if not st.session_state.cobol_audit_report:
-            sys_role = load_agent_prompt("04_auditor_CobolToPython.md")
-            st.session_state.cobol_audit_report = run_llm_text(
-                sys_role, st.session_state.cobol_python_code, 
-                st.session_state.model_name, st.session_state.temp
+            st.session_state.cobol_audit_report = _run_workflow_step(
+                step="audit",
+                prompt_file="04_auditor_CobolToPython.md",
+                source_input=st.session_state.cobol_python_code,
             )
 
         with st.expander("🛡️ Ver Informe de Auditoría"):

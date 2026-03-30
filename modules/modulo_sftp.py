@@ -1,6 +1,35 @@
 import streamlit as st
+from core.infrastructure import backend_api_client
+from core.login import run_backend_operation_with_retry
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
+
+
+def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: str = "") -> str:
+    """Ejecuta step SFTP por backend y mantiene fallback local."""
+    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        ok, payload = run_backend_operation_with_retry(
+            lambda token: backend_api_client.execute_workflow_step(
+                token=token,
+                workflow="sftp",
+                step=step,
+                source_input=source_input,
+                context=context,
+                model=st.session_state.model_name,
+                temp=st.session_state.temp,
+            )
+        )
+        if ok and isinstance(payload, dict):
+            return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+
+    sys_role = load_agent_prompt(prompt_file)
+    result = run_llm_text(
+        sys_role,
+        source_input,
+        st.session_state.model_name,
+        st.session_state.temp,
+    )
+    return result or "No se pudo obtener respuesta del modelo en este paso."
 
 def show_sftp_migration():
     st.title("🤖 Agente Migrador de Protocolos IBM i")
@@ -38,10 +67,10 @@ def show_sftp_migration():
         step_header("Paso 2: Análisis de Código Legacy")
         if st.session_state.sftp_current_step == 2:
             with st.spinner("Escaneando dependencias y comandos FTP..."):
-                sys_role = load_agent_prompt("01_analyst_AS400SFTP.md")
-                st.session_state.sftp_analysis = run_llm_text(
-                    sys_role, st.session_state.sftp_source_code, 
-                    st.session_state.model_name, st.session_state.temp
+                st.session_state.sftp_analysis = _run_workflow_step(
+                    step="analyze",
+                    prompt_file="01_analyst_AS400SFTP.md",
+                    source_input=st.session_state.sftp_source_code,
                 )
                 st.session_state.sftp_current_step = 3
                 st.rerun()
@@ -52,10 +81,10 @@ def show_sftp_migration():
         step_header("Paso 3: Estrategia SFTP (Arquitectura)")
         if st.session_state.sftp_current_step == 3:
             with st.container(border=True):
-                sys_role = load_agent_prompt("02_architect_AS400SFTP.md")
-                suggested_plan = run_llm_text(
-                    sys_role, st.session_state.sftp_analysis, 
-                    st.session_state.model_name, st.session_state.temp
+                suggested_plan = _run_workflow_step(
+                    step="architect",
+                    prompt_file="02_architect_AS400SFTP.md",
+                    source_input=st.session_state.sftp_analysis,
                 )
                 st.session_state.sftp_plan = st.text_area("Propuesta Técnica:", value=suggested_plan, height=200)
                 if st.button("Aprobar y Generar Código", use_container_width=True):
@@ -69,10 +98,11 @@ def show_sftp_migration():
         step_header("Paso 4: Generación de Código Modernizado")
         if st.session_state.sftp_current_step == 4:
             with st.spinner("Escribiendo código RPGLE/CL con SFTP..."):
-                sys_role = load_agent_prompt("03_developer_AS400SFTP.md")
                 prompt = f"Fuente Original:\n{st.session_state.sftp_source_code}\n\nPlan Aprobado:\n{st.session_state.sftp_plan}"
-                st.session_state.sftp_execution_code = run_llm_text(
-                    sys_role, prompt, st.session_state.model_name, st.session_state.temp
+                st.session_state.sftp_execution_code = _run_workflow_step(
+                    step="develop",
+                    prompt_file="03_developer_AS400SFTP.md",
+                    source_input=prompt,
                 )
                 st.session_state.sftp_current_step = 5
                 st.rerun()
@@ -83,10 +113,10 @@ def show_sftp_migration():
         step_header("Paso 5: Auditoría de Seguridad")
         if st.session_state.sftp_current_step == 5:
             with st.status("Verificando claves SSH y permisos...", expanded=True):
-                sys_role = load_agent_prompt("04_auditor_AS400SFTP.md")
-                st.session_state.sftp_validation_report = run_llm_text(
-                    sys_role, st.session_state.sftp_execution_code, 
-                    st.session_state.model_name, st.session_state.temp
+                st.session_state.sftp_validation_report = _run_workflow_step(
+                    step="audit",
+                    prompt_file="04_auditor_AS400SFTP.md",
+                    source_input=st.session_state.sftp_execution_code,
                 )
                 st.session_state.sftp_current_step = 6
                 st.rerun()

@@ -7,8 +7,37 @@ from modules.dtsx_generator import (
     infer_package_name,
     summarize_connections,
 )
+from core.infrastructure import backend_api_client
+from core.login import run_backend_operation_with_retry
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
+
+
+def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: str = "") -> str:
+    """Ejecuta step COBOL->DTSX por backend y mantiene fallback local."""
+    if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        ok, payload = run_backend_operation_with_retry(
+            lambda token: backend_api_client.execute_workflow_step(
+                token=token,
+                workflow="cobol_dtsx",
+                step=step,
+                source_input=source_input,
+                context=context,
+                model=st.session_state.model_name,
+                temp=st.session_state.temp,
+            )
+        )
+        if ok and isinstance(payload, dict):
+            return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")
+
+    sys_role = load_agent_prompt(prompt_file)
+    result = run_llm_text(
+        sys_role,
+        source_input,
+        st.session_state.model_name,
+        st.session_state.temp,
+    )
+    return result or "No se pudo obtener respuesta del modelo en este paso."
 
 
 def show_dtsx_generation():
@@ -70,12 +99,10 @@ def show_dtsx_generation():
         step_header("Paso 2: Análisis de accesos SQL y dependencias")
         if not st.session_state.dtsx_analysis:
             if st.button("Ejecutar agente analista DTSX"):
-                sys_role = load_agent_prompt("01_analyst_CobolToDtsx.md")
-                st.session_state.dtsx_analysis = run_llm_text(
-                    sys_role,
-                    st.session_state.dtsx_source_code,
-                    st.session_state.model_name,
-                    st.session_state.temp,
+                st.session_state.dtsx_analysis = _run_workflow_step(
+                    step="analyze",
+                    prompt_file="01_analyst_CobolToDtsx.md",
+                    source_input=st.session_state.dtsx_source_code,
                 )
                 st.rerun()
 
@@ -89,16 +116,14 @@ def show_dtsx_generation():
     if st.session_state.dtsx_current_step >= 3:
         step_header("Paso 3: Diseño de paquete SSIS")
         if not st.session_state.dtsx_plan:
-            sys_role = load_agent_prompt("02_architect_CobolToDtsx.md")
             context = (
                 f"Codigo COBOL:\n{st.session_state.dtsx_source_code}\n\n"
                 f"Analisis:\n{st.session_state.dtsx_analysis}"
             )
-            st.session_state.dtsx_plan = run_llm_text(
-                sys_role,
-                context,
-                st.session_state.model_name,
-                st.session_state.temp,
+            st.session_state.dtsx_plan = _run_workflow_step(
+                step="architect",
+                prompt_file="02_architect_CobolToDtsx.md",
+                source_input=context,
             )
 
         st.session_state.dtsx_plan = st.text_area(
@@ -116,16 +141,14 @@ def show_dtsx_generation():
         step_header("Paso 4: Generación de paquete DTSX")
         if not st.session_state.dtsx_developer_notes:
             with st.spinner("Definiendo estructura técnica del paquete SSIS..."):
-                sys_role = load_agent_prompt("03_developer_CobolToDtsx.md")
                 context = (
                     f"Plan aprobado:\n{st.session_state.dtsx_plan}\n\n"
                     f"Fuente COBOL:\n{st.session_state.dtsx_source_code}"
                 )
-                st.session_state.dtsx_developer_notes = run_llm_text(
-                    sys_role,
-                    context,
-                    st.session_state.model_name,
-                    st.session_state.temp,
+                st.session_state.dtsx_developer_notes = _run_workflow_step(
+                    step="develop",
+                    prompt_file="03_developer_CobolToDtsx.md",
+                    source_input=context,
                 )
 
         if not st.session_state.dtsx_dtsx_content:
@@ -148,17 +171,15 @@ def show_dtsx_generation():
     if st.session_state.dtsx_current_step >= 5:
         step_header("Paso 5: Auditoría y entrega")
         if not st.session_state.dtsx_audit_report:
-            sys_role = load_agent_prompt("04_auditor_CobolToDtsx.md")
             audit_context = (
                 f"Plan:\n{st.session_state.dtsx_plan}\n\n"
                 f"Blueprint:\n{st.session_state.dtsx_developer_notes}\n\n"
                 f"DTSX:\n{st.session_state.dtsx_dtsx_content}"
             )
-            st.session_state.dtsx_audit_report = run_llm_text(
-                sys_role,
-                audit_context,
-                st.session_state.model_name,
-                st.session_state.temp,
+            st.session_state.dtsx_audit_report = _run_workflow_step(
+                step="audit",
+                prompt_file="04_auditor_CobolToDtsx.md",
+                source_input=audit_context,
             )
 
         with st.expander("🛡️ Ver informe de auditoría DTSX"):
