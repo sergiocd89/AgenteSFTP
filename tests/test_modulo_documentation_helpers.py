@@ -5,6 +5,7 @@ import sys
 import types
 import zipfile
 import pytest
+from core.observability import format_message_with_request_id
 
 
 class SessionState(dict):
@@ -212,9 +213,7 @@ def test_run_documentation_analysis_falls_back_to_local(monkeypatch):
 
 
 def test_with_request_id_formats_message():
-    module = _import_doc_module()
-
-    message = module._with_request_id("Error de backend", "abc123")
+    message = format_message_with_request_id("Error de backend", "abc123")
 
     assert "Error de backend" in message
     assert "request_id=abc123" in message

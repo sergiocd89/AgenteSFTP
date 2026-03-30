@@ -2,6 +2,7 @@ import importlib
 import os
 import sys
 import types
+from core.observability import format_message_with_request_id
 
 
 class SessionState(dict):
@@ -175,9 +176,7 @@ def test_run_agent_falls_back_to_local_when_backend_disabled(monkeypatch):
 
 
 def test_with_request_id_formats_message():
-    workflow = _import_workflow_module()
-
-    message = workflow._with_request_id("Error de backend", "abc123")
+    message = format_message_with_request_id("Error de backend", "abc123")
 
     assert "Error de backend" in message
     assert "request_id=abc123" in message

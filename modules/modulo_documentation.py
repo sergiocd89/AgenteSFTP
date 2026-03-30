@@ -1,7 +1,6 @@
 import io
 import re
 import time
-import uuid
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -12,6 +11,7 @@ from core.domain.integration_service import publish_confluence_page
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
+from core.observability import format_message_with_request_id, generate_request_id
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
 
@@ -447,7 +447,7 @@ def _extract_from_zip_bytes(zip_bytes: bytes, file_name: str, max_chars: int) ->
 def _run_documentation_analysis(user_content: str) -> str:
     """Ejecuta análisis de documentación vía backend (workflow) con fallback local."""
     if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
-        request_id = uuid.uuid4().hex[:12]
+        request_id = generate_request_id()
         started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
             lambda token: backend_api_client.execute_workflow_step(
@@ -483,12 +483,6 @@ def _run_documentation_analysis(user_content: str) -> str:
     )
     return result or "No se pudo generar la documentación para este archivo/paquete."
 
-
-def _with_request_id(message: str, request_id: str | None) -> str:
-    text = (message or "").strip() or "Error no especificado."
-    if not request_id:
-        return text
-    return f"{text} [request_id={request_id}]"
 
 def show_documentation_module() -> None:
     st.title("📝 Módulo Documentación de Archivos o Paquetes")
@@ -690,7 +684,7 @@ def show_documentation_module() -> None:
                 try:
                     with st.spinner("Subiendo documentacion a Confluence..."):
                         if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
-                            request_id = uuid.uuid4().hex[:12]
+                            request_id = generate_request_id()
                             ok, payload = run_backend_operation_with_retry(
                                 lambda token: backend_api_client.publish_confluence_page(
                                     token,
@@ -706,7 +700,7 @@ def show_documentation_module() -> None:
                             if ok:
                                 result["success"] = True
                             else:
-                                result["message"] = _with_request_id(
+                                result["message"] = format_message_with_request_id(
                                     str(result.get("message", "Error al subir a Confluence.")),
                                     request_id,
                                 )
