@@ -54,6 +54,11 @@ python -m uvicorn AgenteSFTPBackend.app.main:app --reload --port 8000
 - `POST /api/v1/profiles/{username}/reset-password` (Bearer token, solo admin)
 - `POST /api/v1/llm/generate` (Bearer token)
 - `POST /api/v1/workflows/{workflow}/steps/{step}` (Bearer token)
+- `POST /api/v1/workflows/sftp/{step}` (Bearer token, step tipado)
+- `POST /api/v1/workflows/cobol-python/{step}` (Bearer token, step tipado)
+- `POST /api/v1/workflows/cobol-dtsx/{step}` (Bearer token, step tipado)
+- `POST /api/v1/workflows/requirement/{step}` (Bearer token, step tipado)
+- `POST /api/v1/workflows/documentation/{step}` (Bearer token, step tipado)
 
 Workflows soportados en este primer corte:
 

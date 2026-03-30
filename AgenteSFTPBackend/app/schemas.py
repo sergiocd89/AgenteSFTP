@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 
@@ -94,3 +96,37 @@ class WorkflowStepResponse(BaseModel):
     step: str
     content: str | None = None
     error_code: str | None = None
+
+
+class SftpStep(str, Enum):
+    analyze = "analyze"
+    architect = "architect"
+    develop = "develop"
+    audit = "audit"
+
+
+class CobolPythonStep(str, Enum):
+    analyze = "analyze"
+    architect = "architect"
+    develop = "develop"
+    audit = "audit"
+
+
+class CobolDtsxStep(str, Enum):
+    analyze = "analyze"
+    architect = "architect"
+    develop = "develop"
+    audit = "audit"
+
+
+class RequirementStep(str, Enum):
+    create = "create"
+    refine = "refine"
+    diagram = "diagram"
+    size = "size"
+    test_cases = "test_cases"
+    format_issue = "format_issue"
+
+
+class DocumentationStep(str, Enum):
+    analyze = "analyze"

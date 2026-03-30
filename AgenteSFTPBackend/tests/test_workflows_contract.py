@@ -85,3 +85,38 @@ def test_workflow_unknown_returns_404(monkeypatch):
     )
 
     assert response.status_code == 404
+
+
+def test_typed_sftp_workflow_step_success(monkeypatch):
+    monkeypatch.setattr(workflows_router, "get_workflow_module_key", lambda _workflow: "SFTP")
+    monkeypatch.setattr(workflows_router, "can_access_module", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        workflows_router,
+        "execute_workflow_step",
+        lambda **_kwargs: {"success": True, "message": "ok", "data": {"content": "resultado-typed"}, "error_code": None},
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/workflows/sftp/analyze",
+        headers=_auth_header(),
+        json={"input": "source", "context": "ctx", "model": "gpt-4o", "temp": 0.0},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["workflow"] == "sftp"
+    assert payload["step"] == "analyze"
+    assert payload["content"] == "resultado-typed"
+
+
+def test_typed_requirement_invalid_step_returns_422():
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/workflows/requirement/invalid-step",
+        headers=_auth_header(),
+        json={"input": "source", "context": "ctx", "model": "gpt-4o", "temp": 0.0},
+    )
+
+    assert response.status_code == 422
