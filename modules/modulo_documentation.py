@@ -462,6 +462,7 @@ def _run_documentation_analysis(user_content: str) -> str:
                 context="",
                 model=st.session_state.model_name,
                 temp=st.session_state.temp,
+                request_id=request_id,
             )
         )
         duration_ms = int((time.perf_counter() - started_at) * 1000)
@@ -698,6 +699,7 @@ def show_documentation_module() -> None:
                                     confluence_space_key.strip(),
                                     confluence_user.strip(),
                                     confluence_api_token.strip(),
+                                    request_id=request_id,
                                 )
                             )
                             result = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}

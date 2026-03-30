@@ -33,6 +33,7 @@ def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: 
                 context=context,
                 model=st.session_state.model_name,
                 temp=st.session_state.temp,
+                request_id=request_id,
             )
         )
         duration_ms = int((time.perf_counter() - started_at) * 1000)

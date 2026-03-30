@@ -42,6 +42,7 @@ def _http_json(
     path: str,
     payload: dict[str, Any] | None = None,
     token: str | None = None,
+    extra_headers: dict[str, str] | None = None,
     timeout: float = 10.0,
 ) -> tuple[bool, int, dict[str, Any]]:
     base_url = get_backend_base_url()
@@ -53,6 +54,8 @@ def _http_json(
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if extra_headers:
+        headers.update(extra_headers)
 
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
@@ -273,6 +276,7 @@ def execute_workflow_step(
     context: str,
     model: str,
     temp: float,
+    request_id: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     workflow_key = (workflow or "").strip().lower()
     step_key = (step or "").strip().lower()
@@ -287,6 +291,7 @@ def execute_workflow_step(
             "temp": temp,
         },
         token=token,
+        extra_headers={"X-Request-ID": request_id} if request_id else None,
         timeout=_workflow_timeout_seconds(step_key),
     )
     if ok:
@@ -333,6 +338,7 @@ def create_jira_issue(
     description_text: str,
     jira_user: str,
     jira_password: str,
+    request_id: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     ok, status, body = _http_json(
         "POST",
@@ -347,6 +353,7 @@ def create_jira_issue(
             "jira_password": jira_password,
         },
         token=token,
+        extra_headers={"X-Request-ID": request_id} if request_id else None,
         timeout=30.0,
     )
     if ok:
@@ -386,6 +393,7 @@ def publish_confluence_page(
     space_key: str,
     user: str,
     api_token: str,
+    request_id: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     ok, status, body = _http_json(
         "POST",
@@ -399,6 +407,7 @@ def publish_confluence_page(
             "api_token": api_token,
         },
         token=token,
+        extra_headers={"X-Request-ID": request_id} if request_id else None,
         timeout=30.0,
     )
     if ok:
@@ -430,7 +439,13 @@ def publish_confluence_page(
     }
 
 
-def get_confluence_metadata(token: str, page_url: str, user: str, api_token: str) -> tuple[bool, dict[str, Any]]:
+def get_confluence_metadata(
+    token: str,
+    page_url: str,
+    user: str,
+    api_token: str,
+    request_id: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
     ok, status, body = _http_json(
         "POST",
         "/api/v1/integrations/confluence/metadata",
@@ -440,6 +455,7 @@ def get_confluence_metadata(token: str, page_url: str, user: str, api_token: str
             "api_token": api_token,
         },
         token=token,
+        extra_headers={"X-Request-ID": request_id} if request_id else None,
         timeout=20.0,
     )
     if ok:

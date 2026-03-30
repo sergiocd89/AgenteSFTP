@@ -84,6 +84,7 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
                 context="",
                 model=st.session_state.model_name,
                 temp=st.session_state.temp,
+                request_id=request_id,
             )
         )
         duration_ms = int((time.perf_counter() - started_at) * 1000)
@@ -413,6 +414,7 @@ def show_requirement_workflow():
                                 confluence_link.strip(),
                                 confluence_user.strip(),
                                 confluence_password.strip(),
+                                request_id=request_id,
                             )
                         )
                         result_meta = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
@@ -479,6 +481,7 @@ def show_requirement_workflow():
                                     confluence_link.strip(),
                                     confluence_user.strip(),
                                     confluence_password.strip(),
+                                    request_id=request_id,
                                 )
                             )
                             result_meta = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
@@ -822,6 +825,7 @@ def show_requirement_workflow():
                                 jira_description,
                                 jira_user,
                                 jira_password,
+                                request_id=request_id,
                             )
                         )
                         result = payload if isinstance(payload, dict) else {"success": False, "message": str(payload)}
