@@ -65,6 +65,8 @@ Crea un archivo `.env` en la raíz del proyecto (puedes usar `.env.example` como
 | `BACKEND_API_ENABLED` | No | Habilita modo coexistencia para consumir API FastAPI desde Streamlit | `true` |
 | `BACKEND_API_BASE_URL` | No | URL base del backend FastAPI | `http://localhost:8000` |
 | `BACKEND_AUTO_LOGOUT_ON_AUTH_FAILURE` | No | Si falla refresh forzado: cierra sesión Streamlit (`true`) o solo invalida token backend (`false`) | `true` |
+| `BACKEND_WORKFLOW_TIMEOUT_SECONDS` | No | Timeout base (segundos) para ejecución de workflows backend desde Streamlit | `60` |
+| `BACKEND_WORKFLOW_TIMEOUT_<STEP>` | No | Override por step (`ANALYZE`, `ARCHITECT`, `DEVELOP`, etc.) sobre timeout base | `90` |
 | `JWT_SECRET_KEY` | No | Secreto JWT usado por backend FastAPI (recomendado >= 32 bytes) | `change-me-in-env-with-at-least-32-bytes` |
 | `JWT_ALGORITHM` | No | Algoritmo de firma JWT | `HS256` |
 | `JWT_EXP_MINUTES` | No | Minutos de vigencia del token JWT | `60` |

@@ -19,6 +19,24 @@ def get_backend_base_url() -> str:
     return os.getenv("BACKEND_API_BASE_URL", "").strip().rstrip("/")
 
 
+def _parse_positive_float(raw: str | None, default: float) -> float:
+    try:
+        value = float(str(raw).strip())
+        return value if value > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _workflow_timeout_seconds(step: str) -> float:
+    default_timeout = _parse_positive_float(os.getenv("BACKEND_WORKFLOW_TIMEOUT_SECONDS", "60"), 60.0)
+    safe_step = "".join(ch if ch.isalnum() else "_" for ch in (step or "").strip().upper())
+    specific_key = f"BACKEND_WORKFLOW_TIMEOUT_{safe_step}"
+    specific_raw = os.getenv(specific_key)
+    if specific_raw is None:
+        return default_timeout
+    return _parse_positive_float(specific_raw, default_timeout)
+
+
 def _http_json(
     method: str,
     path: str,
@@ -269,7 +287,7 @@ def execute_workflow_step(
             "temp": temp,
         },
         token=token,
-        timeout=60.0,
+        timeout=_workflow_timeout_seconds(step_key),
     )
     if ok:
         return True, body
