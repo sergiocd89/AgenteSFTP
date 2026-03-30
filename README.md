@@ -301,6 +301,12 @@ streamlit run main.py
 
 Al iniciar, la UI permite elegir uno de tres flujos de migración y ejecutar el pipeline completo hasta auditoría y entrega.
 
+## Checklist de PR
+
+Para preparar el PR de separación y convivencia Streamlit + FastAPI, usa:
+
+- `docs/pr-checklist-backend-coexistence.md`
+
 ## Flujo COBOL a DTSX
 
 El nuevo módulo COBOL a DTSX está orientado a programas COBOL con SQL embebido y acceso a SQL Server o Sybase. El flujo:
