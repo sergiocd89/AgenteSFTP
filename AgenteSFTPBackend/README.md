@@ -59,6 +59,9 @@ python -m uvicorn AgenteSFTPBackend.app.main:app --reload --port 8000
 - `POST /api/v1/workflows/cobol-dtsx/{step}` (Bearer token, step tipado)
 - `POST /api/v1/workflows/requirement/{step}` (Bearer token, step tipado)
 - `POST /api/v1/workflows/documentation/{step}` (Bearer token, step tipado)
+- `POST /api/v1/integrations/jira/issue` (Bearer token, módulo RequirementWorkflow)
+- `POST /api/v1/integrations/confluence/publish` (Bearer token, módulo Documentation)
+- `POST /api/v1/integrations/confluence/metadata` (Bearer token, módulo RequirementWorkflow o Documentation)
 
 Workflows soportados en este primer corte:
 

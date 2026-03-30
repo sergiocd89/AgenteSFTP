@@ -3,6 +3,11 @@ import json
 import os
 
 from core.domain.ai_service import call_llm as domain_call_llm
+from core.domain.integration_service import (
+    publish_confluence_page,
+    publish_jira_issue,
+    resolve_confluence_metadata,
+)
 from core.domain.auth_service import change_password, check_credentials
 from core.domain.profile_service import ProfileService
 from core.infrastructure import auth_db
@@ -278,3 +283,45 @@ def execute_workflow_step(
         }
 
     return generate_llm_text(system_role=system_role, user_content=user_content, model=model, temp=temp)
+
+
+def create_jira_issue(
+    base_url: str,
+    project_key: str,
+    issue_type: str,
+    summary: str,
+    description_text: str,
+    jira_user: str | None,
+    jira_password: str | None,
+) -> dict:
+    return publish_jira_issue(
+        base_url=base_url,
+        project_key=project_key,
+        issue_type=issue_type,
+        summary=summary,
+        description_text=description_text,
+        jira_user=jira_user,
+        jira_password=jira_password,
+    )
+
+
+def create_confluence_page(
+    title: str,
+    markdown_content: str,
+    parent_id: str | None,
+    space_key: str | None,
+    user: str | None,
+    api_token: str | None,
+) -> dict:
+    return publish_confluence_page(
+        title=title,
+        markdown_content=markdown_content,
+        parent_id=parent_id,
+        space_key=space_key,
+        user=user,
+        api_token=api_token,
+    )
+
+
+def get_confluence_metadata(page_url: str, user: str, api_token: str) -> dict:
+    return resolve_confluence_metadata(page_url=page_url, user=user, api_token=api_token)

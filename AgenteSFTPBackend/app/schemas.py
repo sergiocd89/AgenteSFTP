@@ -130,3 +130,35 @@ class RequirementStep(str, Enum):
 
 class DocumentationStep(str, Enum):
     analyze = "analyze"
+
+
+class IntegrationResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict | None = None
+    error_code: str | None = None
+
+
+class JiraIssueRequest(BaseModel):
+    base_url: str = Field(min_length=1)
+    project_key: str = Field(min_length=1)
+    issue_type: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    description_text: str = ""
+    jira_user: str | None = None
+    jira_password: str | None = None
+
+
+class ConfluencePublishRequest(BaseModel):
+    title: str = Field(min_length=1)
+    markdown_content: str = ""
+    parent_id: str | None = None
+    space_key: str | None = None
+    user: str | None = None
+    api_token: str | None = None
+
+
+class ConfluenceMetadataRequest(BaseModel):
+    page_url: str = Field(min_length=1)
+    user: str = Field(min_length=1)
+    api_token: str = Field(min_length=1)
