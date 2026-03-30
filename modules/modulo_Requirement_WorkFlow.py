@@ -1,14 +1,19 @@
 from io import BytesIO
 import os
 import re
+import time
 
 import streamlit as st
 import streamlit.components.v1 as components
 from core.domain.integration_service import publish_jira_issue, resolve_confluence_metadata
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
+from core.logger import get_logger, log_operation
 from core.ui.ai_presenter import run_llm_text
 from core.utils import load_agent_prompt, step_header
+
+
+LOGGER = get_logger(__name__)
 
 
 def _extract_text_from_file(uploaded_file) -> str:
@@ -63,6 +68,7 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
 
     step = requirement_step_map.get(agent_filename)
     if step and backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
             lambda token: backend_api_client.execute_workflow_step(
                 token=token,
@@ -73,6 +79,17 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
                 model=st.session_state.model_name,
                 temp=st.session_state.temp,
             )
+        )
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        error_code = None
+        if isinstance(payload, dict):
+            error_code = payload.get("error_code")
+        log_operation(
+            LOGGER,
+            operation="workflow_step_backend",
+            success=bool(ok),
+            error_code=str(error_code) if error_code else None,
+            details=f"workflow=requirement step={step} duration_ms={duration_ms}",
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")

@@ -54,56 +54,75 @@ def _import_module(module_name: str):
     return importlib.import_module(module_name)
 
 
-def _assert_backend_path(module, workflow: str, step: str):
+def _assert_backend_path(module, workflow: str, step: str, monkeypatch):
     module.st.session_state["backend_access_token"] = "token"
     module.st.session_state["model_name"] = "gpt-4o"
     module.st.session_state["temp"] = 0.0
 
     called = {}
 
-    module.backend_api_client.is_backend_enabled = lambda: True
+    monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: True)
 
     def _fake_retry(operation):
         return operation("token")
 
-    module.run_backend_operation_with_retry = _fake_retry
+    monkeypatch.setattr(module, "run_backend_operation_with_retry", _fake_retry)
+
+    log_calls = []
+
+    def _fake_log_operation(logger, operation, success, error_code=None, details=None):
+        log_calls.append(
+            {
+                "operation": operation,
+                "success": success,
+                "error_code": error_code,
+                "details": details,
+            }
+        )
+
+    monkeypatch.setattr(module, "log_operation", _fake_log_operation)
 
     def _fake_execute(**kwargs):
         called.update(kwargs)
         return True, {"content": "backend-output"}
 
-    module.backend_api_client.execute_workflow_step = _fake_execute
+    monkeypatch.setattr(module.backend_api_client, "execute_workflow_step", _fake_execute)
 
     out = module._run_workflow_step(step, "any_prompt.md", "input-data", "ctx")
 
     assert out == "backend-output"
     assert called["workflow"] == workflow
     assert called["step"] == step
+    assert log_calls
+    assert log_calls[-1]["operation"] == "workflow_step_backend"
+    assert log_calls[-1]["success"] is True
+    assert f"workflow={workflow}" in str(log_calls[-1]["details"])
+    assert f"step={step}" in str(log_calls[-1]["details"])
 
 
-def _assert_fallback_path(module, step: str):
-    module.backend_api_client.is_backend_enabled = lambda: False
-    module.load_agent_prompt = lambda _prompt: "sys"
-    module.run_llm_text = lambda *_args, **_kwargs: "local-output"
+def _assert_fallback_path(module, step: str, monkeypatch):
+    monkeypatch.setattr(module.backend_api_client, "is_backend_enabled", lambda: False)
+    monkeypatch.setattr(module, "load_agent_prompt", lambda _prompt: "sys")
+    monkeypatch.setattr(module, "run_llm_text", lambda *_args, **_kwargs: "local-output")
 
     out = module._run_workflow_step(step, "any_prompt.md", "input-data", "ctx")
 
     assert out == "local-output"
 
 
-def test_sftp_routing_backend_and_fallback():
+def test_sftp_routing_backend_and_fallback(monkeypatch):
     module = _import_module("modules.modulo_sftp")
-    _assert_backend_path(module, "sftp", "analyze")
-    _assert_fallback_path(module, "audit")
+    _assert_backend_path(module, "sftp", "analyze", monkeypatch)
+    _assert_fallback_path(module, "audit", monkeypatch)
 
 
-def test_cobol_routing_backend_and_fallback():
+def test_cobol_routing_backend_and_fallback(monkeypatch):
     module = _import_module("modules.modulo_cobol")
-    _assert_backend_path(module, "cobol_python", "analyze")
-    _assert_fallback_path(module, "develop")
+    _assert_backend_path(module, "cobol_python", "analyze", monkeypatch)
+    _assert_fallback_path(module, "develop", monkeypatch)
 
 
-def test_dtsx_routing_backend_and_fallback():
+def test_dtsx_routing_backend_and_fallback(monkeypatch):
     module = _import_module("modules.modulo_dtsx")
-    _assert_backend_path(module, "cobol_dtsx", "architect")
-    _assert_fallback_path(module, "audit")
+    _assert_backend_path(module, "cobol_dtsx", "architect", monkeypatch)
+    _assert_fallback_path(module, "audit", monkeypatch)

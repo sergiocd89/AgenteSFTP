@@ -132,6 +132,19 @@ def test_run_agent_uses_backend_workflow_when_enabled(monkeypatch):
         return ok, payload
 
     monkeypatch.setattr(workflow, "run_backend_operation_with_retry", _fake_retry)
+    log_calls = []
+    monkeypatch.setattr(
+        workflow,
+        "log_operation",
+        lambda _logger, operation, success, error_code=None, details=None: log_calls.append(
+            {
+                "operation": operation,
+                "success": success,
+                "error_code": error_code,
+                "details": details,
+            }
+        ),
+    )
     monkeypatch.setattr(
         workflow.backend_api_client,
         "execute_workflow_step",
@@ -141,6 +154,11 @@ def test_run_agent_uses_backend_workflow_when_enabled(monkeypatch):
     result = workflow._run_agent("Agent_Requirement_WorkFlow_01_Creator_Use_Case.md", "entrada")
 
     assert result == "backend:create"
+    assert log_calls
+    assert log_calls[-1]["operation"] == "workflow_step_backend"
+    assert log_calls[-1]["success"] is True
+    assert "workflow=requirement" in str(log_calls[-1]["details"])
+    assert "step=create" in str(log_calls[-1]["details"])
 
 
 def test_run_agent_falls_back_to_local_when_backend_disabled(monkeypatch):

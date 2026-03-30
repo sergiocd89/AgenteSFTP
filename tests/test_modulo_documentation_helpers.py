@@ -172,6 +172,19 @@ def test_run_documentation_analysis_uses_backend_when_enabled(monkeypatch):
         return operation("token")
 
     monkeypatch.setattr(module, "run_backend_operation_with_retry", _fake_retry)
+    log_calls = []
+    monkeypatch.setattr(
+        module,
+        "log_operation",
+        lambda _logger, operation, success, error_code=None, details=None: log_calls.append(
+            {
+                "operation": operation,
+                "success": success,
+                "error_code": error_code,
+                "details": details,
+            }
+        ),
+    )
     monkeypatch.setattr(
         module.backend_api_client,
         "execute_workflow_step",
@@ -180,6 +193,11 @@ def test_run_documentation_analysis_uses_backend_when_enabled(monkeypatch):
 
     output = module._run_documentation_analysis("entrada")
     assert output == "backend-doc"
+    assert log_calls
+    assert log_calls[-1]["operation"] == "workflow_step_backend"
+    assert log_calls[-1]["success"] is True
+    assert "workflow=documentation" in str(log_calls[-1]["details"])
+    assert "step=analyze" in str(log_calls[-1]["details"])
 
 
 def test_run_documentation_analysis_falls_back_to_local(monkeypatch):
