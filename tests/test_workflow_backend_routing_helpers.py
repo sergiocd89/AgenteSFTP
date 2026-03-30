@@ -96,6 +96,7 @@ def _assert_backend_path(module, workflow: str, step: str, monkeypatch):
     assert log_calls
     assert log_calls[-1]["operation"] == "workflow_step_backend"
     assert log_calls[-1]["success"] is True
+    assert "request_id=" in str(log_calls[-1]["details"])
     assert f"workflow={workflow}" in str(log_calls[-1]["details"])
     assert f"step={step}" in str(log_calls[-1]["details"])
 

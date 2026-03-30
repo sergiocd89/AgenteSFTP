@@ -196,6 +196,7 @@ def test_run_documentation_analysis_uses_backend_when_enabled(monkeypatch):
     assert log_calls
     assert log_calls[-1]["operation"] == "workflow_step_backend"
     assert log_calls[-1]["success"] is True
+    assert "request_id=" in str(log_calls[-1]["details"])
     assert "workflow=documentation" in str(log_calls[-1]["details"])
     assert "step=analyze" in str(log_calls[-1]["details"])
 

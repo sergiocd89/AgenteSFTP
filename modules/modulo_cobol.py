@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import uuid
 from core.infrastructure import backend_api_client
 from core.login import run_backend_operation_with_retry
 from core.logger import get_logger, log_operation
@@ -13,6 +14,7 @@ LOGGER = get_logger(__name__)
 def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: str = "") -> str:
     """Ejecuta step COBOL->Python por backend y mantiene fallback local."""
     if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        request_id = uuid.uuid4().hex[:12]
         started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
             lambda token: backend_api_client.execute_workflow_step(
@@ -34,7 +36,7 @@ def _run_workflow_step(step: str, prompt_file: str, source_input: str, context: 
             operation="workflow_step_backend",
             success=bool(ok),
             error_code=str(error_code) if error_code else None,
-            details=f"workflow=cobol_python step={step} duration_ms={duration_ms}",
+            details=f"request_id={request_id} workflow=cobol_python step={step} duration_ms={duration_ms}",
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")

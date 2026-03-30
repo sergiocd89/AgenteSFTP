@@ -1,6 +1,7 @@
 import io
 import re
 import time
+import uuid
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -446,6 +447,7 @@ def _extract_from_zip_bytes(zip_bytes: bytes, file_name: str, max_chars: int) ->
 def _run_documentation_analysis(user_content: str) -> str:
     """Ejecuta análisis de documentación vía backend (workflow) con fallback local."""
     if backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        request_id = uuid.uuid4().hex[:12]
         started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
             lambda token: backend_api_client.execute_workflow_step(
@@ -467,7 +469,7 @@ def _run_documentation_analysis(user_content: str) -> str:
             operation="workflow_step_backend",
             success=bool(ok),
             error_code=str(error_code) if error_code else None,
-            details=f"workflow=documentation step=analyze duration_ms={duration_ms}",
+            details=f"request_id={request_id} workflow=documentation step=analyze duration_ms={duration_ms}",
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo generar la documentación para este archivo/paquete.")

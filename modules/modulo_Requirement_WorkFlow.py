@@ -2,6 +2,7 @@ from io import BytesIO
 import os
 import re
 import time
+import uuid
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -68,6 +69,7 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
 
     step = requirement_step_map.get(agent_filename)
     if step and backend_api_client.is_backend_enabled() and st.session_state.get("backend_access_token"):
+        request_id = uuid.uuid4().hex[:12]
         started_at = time.perf_counter()
         ok, payload = run_backend_operation_with_retry(
             lambda token: backend_api_client.execute_workflow_step(
@@ -89,7 +91,7 @@ def _run_agent(agent_filename: str, user_content: str) -> str:
             operation="workflow_step_backend",
             success=bool(ok),
             error_code=str(error_code) if error_code else None,
-            details=f"workflow=requirement step={step} duration_ms={duration_ms}",
+            details=f"request_id={request_id} workflow=requirement step={step} duration_ms={duration_ms}",
         )
         if ok and isinstance(payload, dict):
             return str(payload.get("content") or "No se pudo obtener respuesta del backend en este paso.")

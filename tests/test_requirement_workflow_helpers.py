@@ -157,6 +157,7 @@ def test_run_agent_uses_backend_workflow_when_enabled(monkeypatch):
     assert log_calls
     assert log_calls[-1]["operation"] == "workflow_step_backend"
     assert log_calls[-1]["success"] is True
+    assert "request_id=" in str(log_calls[-1]["details"])
     assert "workflow=requirement" in str(log_calls[-1]["details"])
     assert "step=create" in str(log_calls[-1]["details"])
 
