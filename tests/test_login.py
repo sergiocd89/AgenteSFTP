@@ -303,3 +303,54 @@ def test_render_backend_session_status_noop_when_backend_disabled(monkeypatch):
     login.render_backend_session_status()
 
     assert fake_st.warnings == []
+
+
+def test_run_backend_operation_with_retry_auto_logout_on_forced_refresh_failure(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={
+            "logged_in": True,
+            "username": "user.demo",
+            "backend_access_token": "old-token",
+            "backend_profile": {"is_admin": False},
+            "backend_token_expires_at": time.time() + 600,
+        }
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+    monkeypatch.setattr(login, "ensure_backend_token_fresh", lambda **kwargs: (False if kwargs.get("force") else True), raising=True)
+    monkeypatch.setattr(login, "_auto_logout_on_backend_auth_failure_enabled", lambda: True, raising=True)
+
+    ok, message = login.run_backend_operation_with_retry(
+        lambda _token: (False, "Sesión inválida o expirada. Vuelve a iniciar sesión.")
+    )
+
+    assert ok is False
+    assert "inválida" in message
+    assert fake_st.session_state.logged_in is False
+    assert fake_st.session_state.username == ""
+    assert fake_st.session_state.backend_access_token == ""
+
+
+def test_run_backend_operation_with_retry_no_auto_logout_when_disabled(monkeypatch):
+    fake_st = _FakeStreamlit(
+        initial_state={
+            "logged_in": True,
+            "username": "user.demo",
+            "backend_access_token": "old-token",
+            "backend_profile": {"is_admin": False},
+            "backend_token_expires_at": time.time() + 600,
+        }
+    )
+    monkeypatch.setattr(login, "st", fake_st, raising=True)
+    monkeypatch.setattr(login.backend_api_client, "is_backend_enabled", lambda: True, raising=True)
+    monkeypatch.setattr(login, "ensure_backend_token_fresh", lambda **kwargs: (False if kwargs.get("force") else True), raising=True)
+    monkeypatch.setattr(login, "_auto_logout_on_backend_auth_failure_enabled", lambda: False, raising=True)
+
+    ok, message = login.run_backend_operation_with_retry(
+        lambda _token: (False, "Sesión inválida o expirada. Vuelve a iniciar sesión.")
+    )
+
+    assert ok is False
+    assert "inválida" in message
+    assert fake_st.session_state.logged_in is True
+    assert fake_st.session_state.username == "user.demo"

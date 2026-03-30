@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import time
 from typing import Any, Callable
 from core.utils import check_credentials, change_user_password
@@ -131,6 +132,22 @@ def _looks_like_auth_error(message: str) -> bool:
     return any(marker in text for marker in markers)
 
 
+def _auto_logout_on_backend_auth_failure_enabled() -> bool:
+    raw = os.getenv("BACKEND_AUTO_LOGOUT_ON_AUTH_FAILURE", "true")
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _invalidate_backend_session(auto_logout: bool = False) -> None:
+    st.session_state.backend_access_token = ""
+    st.session_state.backend_profile = {}
+    st.session_state.backend_token_expires_at = 0.0
+
+    if auto_logout:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.login_error = True
+
+
 def run_backend_operation_with_retry(
     operation: Callable[[str], tuple[bool, Any]],
 ) -> tuple[bool, Any]:
@@ -149,6 +166,8 @@ def run_backend_operation_with_retry(
         return ok, payload
 
     if not ensure_backend_token_fresh(force=True):
+        if _auto_logout_on_backend_auth_failure_enabled():
+            _invalidate_backend_session(auto_logout=True)
         return False, "Sesión inválida o expirada. Vuelve a iniciar sesión."
 
     token = str(st.session_state.get("backend_access_token", "") or "")
@@ -220,9 +239,7 @@ def ensure_backend_token_fresh(min_ttl_seconds: int = 120, force: bool = False) 
 
     ok, _message, data = backend_api_client.refresh_access_token(token)
     if not ok:
-        st.session_state.backend_access_token = ""
-        st.session_state.backend_profile = {}
-        st.session_state.backend_token_expires_at = 0.0
+        _invalidate_backend_session(auto_logout=False)
         return False
 
     st.session_state.backend_access_token = str(data.get("access_token", ""))
